@@ -1,0 +1,10 @@
+hsptmp
+obj
+packfile
+*.exe
+data/
+*.dpm
+*.hpi
+readme.txt
+.vscode/
+__back/

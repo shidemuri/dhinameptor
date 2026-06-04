@@ -1,0 +1,2589 @@
+// variables named "reused_X" have different uses in lots of different places so they dont have a specific name (rakugan moment or compiler? who knows)
+// variables named "unk_X" are unknown
+// variables named "unused_X" are either unused or i forgot to replace the name somewhere somehow
+
+#uselib "winmm.dll"
+#cfunc timeGetTime "timeGetTime"
+
+#include "dsoundex.as"
+
+#define KEY_LEFT        0
+#define KEY_UP          1
+#define KEY_RIGHT       2
+#define KEY_DOWN        3
+#define KEY_Z           4
+#define KEY_X           5
+#define KEY_S           6
+#define KEY_C           7
+#define KEY_R           8
+#define KEY_T           9
+#define KEY_O           10
+#define KEY_Q           11
+#define KEY_ESC         19
+
+#define isPressed   0
+#define pressedTime 1
+
+#define isPlaying   0
+
+#define POS_X         0
+#define POS_Y         1
+#define VEL_X        2
+#define VEL_Y        3
+#define ROT       4
+#define ACCEL 5
+
+	screenSize = 1
+	gosub *changeScreenSize
+	title "Dhinameptor"
+	goto *init
+
+*init
+	dim unused_1, 32
+	unused_2 = 20, 1, 100
+	randomize
+	chdpm "data.dpm"
+	maxSfxFileID = 100
+	unk_1 = 1
+
+	/*
+
+	buffer 2: loading screen
+	buffer 3: enemy 1
+	buffer 4: items
+	buffer 5: enemy 2 (purple slimy thingy)
+	buffer 6: flying blue thing with yellow horns
+	
+	buffer 8: big thinfgy blue arrow level up
+	buffer 9: player
+	buffer 14: title screen
+	*/
+
+	buffer 2
+	picload "DPM:data.dpm:loading.bmp"
+	gsel 0
+	pos 0, 0
+	gcopy 2, 0, 0, 320, 240
+	pos 208, 176
+	gcopy 2, 320, 48 * rnd(3), 64, 48
+	pos 0, 0
+	gzoom 320 * (1 + screenSize), 240 * (1 + screenSize), 0, 0, 0, 320, 240
+	repeat 14
+		buffer 2 + cnt, 320, 240, 0
+		picload "DPM:data.dpm:chip_" + str(cnt + 1) + ".bmp"
+	loop
+	gsel 0
+	color 10, 10, 10
+	ds_init 44100, 2
+	dim sfxInfo, maxSfxFileID, 2
+	repeat maxSfxFileID
+		ds_load "data\\se\\se_" + cnt + ".wav", cnt
+		mes stat
+		await 0
+	loop
+
+	for var_95,0,maxSfxFileID,1
+		for var_96,0,unk_1-1,1
+			ds_dup maxSfxFileID + var_95 + maxSfxFileID * var_96, var_95
+		next
+	next
+	
+	pos 80, 0
+	color 10, 10, 10
+	soundBufferBaseID = maxSfxFileID * unk_1 + 1
+	repeat 50
+		ds_load "data\\mu\\" + cnt + ".wav", cnt + soundBufferBaseID
+		mes stat
+		await 0
+	loop
+	ds_load "data\\mu\\g01.wav", soundBufferBaseID + 50
+	ds_load "data\\mu\\g02.wav", soundBufferBaseID + 51
+	sfxVolume = 100
+	musicVolume = 100
+	repeat maxSfxFileID * unk_1
+		ds_vol cnt, sfxVolume
+	loop
+	repeat 50 + 1
+		ds_vol cnt + soundBufferBaseID, musicVolume
+	loop
+	reused_1 = 20
+	dim var_101, reused_1
+	dim var_102, reused_1
+	var_101(0) = 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1
+	var_102(0) = 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+	sfxVolume = 50
+	musicVolume = 50
+	gosub *updateVolume
+	dim keyInfo, 20, 2
+	dim scores, 10
+	exist "data\\savedata\\0"
+	notesel saveData
+	if ( strsize != (-1) ) {
+		noteload "data\\savedata\\0"
+		repeat 10
+			noteget saveParsedScore, cnt
+			scores(cnt) = int(saveParsedScore)
+		loop
+	}
+	onexit goto *exit
+*titleScreen
+	gosub *resetVariables
+	UIAnimStep = 0
+	cursorPos = 0
+	sfxInfo(54, isPlaying) = 1       //small jingle that plays when entering title screen
+	repeat 100
+		ds_stop soundBufferBaseID + cnt
+	loop
+	ds_loop soundBufferBaseID + 51
+	randomTitleScreenImage = rnd(5)
+	scoreCounterDigitAnimStep = 0
+*titleScreenLoop
+	UIAnimStep += 1
+	gosub *checkKeys
+	if ( cursorPos == 0 ) {
+		scoreCounterDigitAnimStep += 1
+	}
+	else {
+		scoreCounterDigitAnimStep = 0
+	}
+	if ( keyInfo(KEY_UP, pressedTime) == 1 ) {
+		cursorPos = (cursorPos + 4) \ 5
+		sfxInfo(52, isPlaying) = 1
+	}
+	if ( keyInfo(KEY_DOWN, pressedTime) == 1 ) {
+		cursorPos = (cursorPos + 1) \ 5
+		sfxInfo(52, isPlaying) = 1
+	}
+	if ( cursorPos == 1 ) {
+		if ( keyInfo(KEY_UP, pressedTime) == 1 ) {
+			cursorPos -= 1
+		}
+		if ( keyInfo(KEY_DOWN, pressedTime) == 1 ) {
+			cursorPos += 1
+		}
+	}
+	if ( cursorPos == 0 and keyInfo(KEY_Z, pressedTime) ) {
+		goto *roundStart
+	}
+	if ( cursorPos == 2 and keyInfo(KEY_LEFT, pressedTime) * keyInfo(KEY_RIGHT, pressedTime) == 0 ) {
+		if ( keyInfo(KEY_LEFT, pressedTime) == 1 or keyInfo(KEY_LEFT, pressedTime) >= 8 ) {
+			if ( sfxVolume >= 5 ) {
+				sfxVolume -= 5
+				gosub *updateVolume
+				sfxInfo(52, isPlaying) = 1
+			}
+		}
+		if ( keyInfo(KEY_RIGHT, pressedTime) == 1 or keyInfo(KEY_RIGHT, pressedTime) >= 8 ) {
+			if ( sfxVolume <= 95 ) {
+				sfxVolume += 5
+				gosub *updateVolume
+				sfxInfo(52, isPlaying) = 1
+			}
+		}
+	}
+	if ( cursorPos == 3 and keyInfo(KEY_LEFT, pressedTime) * keyInfo(KEY_RIGHT, pressedTime) == 0 ) {
+		if ( keyInfo(KEY_LEFT, pressedTime) == 1 or keyInfo(KEY_LEFT, pressedTime) >= 8 ) {
+			if ( musicVolume >= 5 ) {
+				musicVolume -= 5
+				gosub *updateVolume
+				sfxInfo(52, isPlaying) = 1
+			}
+		}
+		if ( keyInfo(KEY_RIGHT, pressedTime) == 1 or keyInfo(KEY_RIGHT, pressedTime) >= 8 ) {
+			if ( musicVolume <= 95 ) {
+				musicVolume += 5
+				gosub *updateVolume
+				sfxInfo(52, isPlaying) = 1
+			}
+		}
+	}
+	if ( cursorPos == 4 and keyInfo(KEY_Z, pressedTime) == 1 ) {
+		screenSize = (screenSize + 1) \ 2
+		sfxInfo(53, isPlaying) = 1
+		gosub *changeScreenSize
+	}
+	redraw 0
+	color 0, 0, 0
+	boxf
+	gmode gmode_add, , , 256
+
+	for titleScreenBackgroundWallY,0,8,1
+		repeat 6
+			titleScreenBackgroundWallTileX = 1
+			if ( cnt == 0 ) {
+				titleScreenBackgroundWallTileX = 0
+			}
+			if ( cnt == 5 ) {
+				titleScreenBackgroundWallTileX = 2
+			}
+			if ( titleScreenBackgroundWallY == 0 ) {
+				titleScreenBackgroundWallTileX += 3
+			}
+			pos 8 * 11 + 24 * cnt, 8 * 11 + 24 * titleScreenBackgroundWallY
+			gcopy 15, 24 * titleScreenBackgroundWallTileX, 112, 24, 24
+		loop
+	next
+
+	gmode gmode_rgb0alpha, , , 256
+	titleScreenCenterX = 132
+	titleScreenCenterY = 90
+	if ( cursorPos == 0 ) {
+		hoveringPlayButton = 0
+	}
+	else {
+		hoveringPlayButton = 1
+	}
+
+	// play button
+
+	pos titleScreenCenterX, titleScreenCenterY + 8
+	gcopy 15, 64 + hoveringPlayButton * 56, 32, 56, 24
+
+	//draws the outer frames for slider bars
+
+	repeat 3
+		pos titleScreenCenterX - 12, titleScreenCenterY + 8 * 7 + cnt * 24
+		gcopy 15, 0, 80, 80, 32
+	loop
+
+	//for the volume bars, the game draws the empty and filled bar one on top of another
+	//then it just crops the filled bar before drawing on top of the empty one
+
+	pos titleScreenCenterX - 4, titleScreenCenterY + 8 * 8     // sfx volume bar full width, empty
+	gcopy 15, 16, 16, 64, 16
+	pos titleScreenCenterX - 16, titleScreenCenterY + 8 * 8    // sfx volume icon
+	gcopy 15, 0, 16, 8, 16
+	pos titleScreenCenterX - 16, titleScreenCenterY + 8 * 11   // music volume icon
+	gcopy 15, 8, 16, 8, 16
+	pos titleScreenCenterX - 4, titleScreenCenterY + 8 * 8     // sfx volume bar cropped width, filled
+	gcopy 15, 80, 16, sfxVolume * 64 / 100, 16
+	pos titleScreenCenterX - 4, titleScreenCenterY + 8 * 11    // music volume bar full width, empty    
+	gcopy 15, 16, 16, 64, 16
+	pos titleScreenCenterX - 4, titleScreenCenterY + 8 * 11    // music volume bar cropped width, filled
+	gcopy 15, 80, 16, musicVolume * 64 / 100, 16
+	pos titleScreenCenterX - 4, titleScreenCenterY + 8 * 14    // window size icons
+	gcopy 15, 0, 32 + screenSize * 16, 64, 16
+	cursorArrowOffsetY = cursorPos * 26
+	if ( cursorPos == 2 ) {
+		cursorArrowOffsetY -= 1
+	}
+	if ( cursorPos == 3 ) {
+		cursorArrowOffsetY -= 3
+	}
+	if ( cursorPos == 4 ) {
+		cursorArrowOffsetY -= 5
+	}
+	pos titleScreenCenterX - 16, titleScreenCenterY + cursorArrowOffsetY + 9            // spinning cursor arrow, left size
+	gcopy 2, 240 + UIAnimStep \ 16 * 8, 232, 8, 16           
+	pos titleScreenCenterX + 8 * 8 + 1, titleScreenCenterY + cursorArrowOffsetY + 9     // spinning cursor arrow, right size 
+	gcopy 2, 240 + (UIAnimStep + 8) \ 16 * 8, 232, 8, 16
+	repeat 10
+		scoreCounterDigitPlace = 10000000
+		isScoreCounterDigitFullyVisible = 0
+
+		for digitPos,0,8,1
+
+			//draws the score counter on the right size of the title screen
+
+			currentScoreCounterDigit = scores(cnt) / scoreCounterDigitPlace \ 10
+			scoreCounterDigitFade = scoreCounterDigitAnimStep - cnt + digitPos - 5
+			if ( scoreCounterDigitFade <= 0 ) {
+				scoreCounterDigitFade = 0
+			}
+			if ( scoreCounterDigitFade >= 16 ) {
+				scoreCounterDigitFade = 16
+			}
+			if ( scoreCounterDigitFade == 2 or scoreCounterDigitFade == 5 or scoreCounterDigitFade == 7 or scoreCounterDigitFade == 11 ) {
+				scoreCounterDigitFade = 1
+			}
+			if ( currentScoreCounterDigit >= 1 or isScoreCounterDigitFullyVisible == 1 ) {
+				gmode gmode_add, 0, 0, 8 * scoreCounterDigitFade
+				isScoreCounterDigitFullyVisible = 1
+			}
+			else {
+				gmode gmode_add, 0, 0, scoreCounterDigitFade
+			}
+			scoreCounterDigitPlace = scoreCounterDigitPlace / 10
+			pos titleScreenCenterX + 8 * 16 + digitPos * 7, 80 + cnt * 16
+			gcopy 2, 128 + currentScoreCounterDigit * 7, 272, 6, 12
+		next
+	loop
+	gmode gmode_add, 0, 0, 256
+	pos titleScreenCenterX - 4 - 8 * 2, titleScreenCenterY - 8 * 4
+	gcopy 15, 144, 0, 104, 32
+	if ( UIAnimStep <= 16 ) {
+		titleScreenImageSlideUp = 16 - UIAnimStep
+	}
+	else {
+		titleScreenImageSlideUp = 0
+	}
+
+	//draws the image on the left side of the title screen
+
+	gmode gmode_add, 0, 0, 128 - titleScreenImageSlideUp * 12 + UIAnimStep \ 2 * 20
+	pos titleScreenCenterX - 4 - 8 * 14, titleScreenCenterY + 8 * 1 + titleScreenImageSlideUp * titleScreenImageSlideUp / 16
+	gcopy 15, randomTitleScreenImage * 64, 176, 64, 112
+	pos 0, 0
+	gzoom 320 * (1 + screenSize), 240 * (1 + screenSize), 0, 0, 0, 320, 240
+	redraw 1
+	gosub *playSfx
+	gosub *loopRoundMusic
+	await 30
+	goto *titleScreenLoop
+*roundStart
+	repeat 100
+		ds_stop soundBufferBaseID + cnt
+	loop
+	ds_stop soundBufferBaseID + 50
+	gosub *resetVariables
+	roundNotPausedTimer = 0
+	playerRotation = 4
+	enemyKillCount = 0
+	proceedToNextSectionTrigger = 0
+	score = 0
+	playerHealth = 10
+	roundState = 0 // 0 = playing | 1 = game over | 2 = paused
+	maxPlayerAcceleration = 5
+	maxPlayerSpeed = maxPlayerAcceleration + 1
+	enemyPosScreenLoopCoord = 384
+
+	//these two refer to the points where enemy positions loop around the screen
+	despawnNegativePoint = -32
+	despawnPositivePoint = 352
+
+	maxEnemies = 100
+	ddim enemyPosition, maxEnemies, 6, 0, 0
+	dim enemyType, maxEnemies
+	dim enemyAnimTimer, maxEnemies
+	dim enemySpawningTimer, maxEnemies
+	dim enemyHealth, maxEnemies
+	maxProjectiles = 100
+	ddim playerBulletPos, maxProjectiles, 5, 0, 0
+	dim playerBulletType, maxProjectiles
+	ddim enemyProjectilePosition, maxProjectiles, 5, 0, 0
+	dim enemyProjectileType, maxProjectiles
+
+	// (particles that spawn when an enemy is killed)
+	maxDeathParticles = 50
+	//dimtype deathParticlePosInfo, 3, maxDeathParticles, 5, 0, 0
+	ddim deathParticlePosInfo, maxDeathParticles, 5, 0, 0
+	dim deathParticleType, maxDeathParticles
+	dim deathParticleSize, maxDeathParticles
+	initialTime = timeGetTime()
+	tripleBulletCountdown = 0
+*roundLoop
+	currentTime = timeGetTime() - initialTime
+	if ( roundTimer * 1000 * 60 / 140 / 12 <= currentTime ) {
+		gosub *checkKeys
+		if ( roundState == 0 ) {
+			if ( playerAccelerationX >= 1 ) {
+				playerAccelerationX -= 1
+			}
+			if ( playerAccelerationY >= 1 ) {
+				playerAccelerationY -= 1
+			}
+			if ( playerAccelerationX <= (-1) ) {
+				playerAccelerationX += 1
+			}
+			if ( playerAccelerationY <= (-1) ) {
+				playerAccelerationY += 1
+			}
+			reused_1 = 0
+			if ( keyInfo(KEY_LEFT, pressedTime) >= 1 and playerAccelerationX >= -maxPlayerAcceleration ) {
+				playerAccelerationX -= 2
+			}
+			if ( keyInfo(KEY_UP, pressedTime) >= 1 and playerAccelerationY >= -maxPlayerAcceleration ) {
+				playerAccelerationY -= 2
+			}
+			if ( keyInfo(KEY_RIGHT, pressedTime) >= 1 and playerAccelerationX <= maxPlayerAcceleration ) {
+				playerAccelerationX += 2
+			}
+			if ( keyInfo(KEY_DOWN, pressedTime) >= 1 and playerAccelerationY <= maxPlayerAcceleration ) {
+				playerAccelerationY += 2
+			}
+			if ( playerAccelerationX >= maxPlayerSpeed ) {
+				playerAccelerationX = maxPlayerAcceleration
+			}
+			if ( playerAccelerationY >= maxPlayerSpeed ) {
+				playerAccelerationY = maxPlayerAcceleration
+			}
+			if ( playerAccelerationX <= -maxPlayerSpeed ) {
+				playerAccelerationX = -maxPlayerAcceleration
+			}
+			if ( playerAccelerationY <= -maxPlayerSpeed ) {
+				playerAccelerationY = -maxPlayerAcceleration
+			}
+			if ( playerAccelerationX * playerAccelerationX + playerAccelerationY * playerAccelerationY == 50 ) {
+				playerAccelerationX = playerAccelerationX * 8 / 10
+				playerAccelerationY = playerAccelerationY * 8 / 10
+			}
+			if ( playerAccelerationX != 0 or playerAccelerationY != 0 ) {
+				playerAngle = rad2deg(atan(playerAccelerationY, playerAccelerationX))
+				if ( playerAngle < 0 ) {
+					playerAngle += 360
+				}
+				playerRotation = int(playerAngle / 22.5)
+				playerWalkAnimFrame += 1
+				if ( playerWalkAnimFrame \ 8 == 1 ) {
+					// step sound
+					sfxInfo(10 + rnd(2), 0) = 1
+				}
+			}
+			else {
+				playerWalkAnimFrame = 0
+			}
+			if ( keyInfo(KEY_Z, pressedTime) == 0 ) {
+				playerCanShoot = 0
+			}
+			if ( keyInfo(KEY_Z, pressedTime) \ 3 == 1 and playerCanShoot == 0 ) {
+				gosub *getAvailablePlayerBulletSlot
+				if ( newProjectile >= 0 ) {
+					if ( whiteBulletCountdown >= 1 ) {
+						playerBulletType(newProjectile) = 2
+						whiteBulletCountdown -= 1
+					}
+					else {
+						playerBulletType(newProjectile) = 1
+					}
+					playerBulletPos(newProjectile, POS_X) = 160.0 + cos(deg2rad(1.0 * playerRotation * 22.5)) * 10
+					playerBulletPos(newProjectile, VEL_X) = cos(deg2rad(1.0 * playerRotation * 22.5)) * 10
+					playerBulletPos(newProjectile, POS_Y) = 160.0 + sin(deg2rad(1.0 * playerRotation * 22.5)) * 10
+					playerBulletPos(newProjectile, VEL_Y) = sin(deg2rad(1.0 * playerRotation * 22.5)) * 10
+					playerBulletPos(newProjectile, ROT) = 1.0 * playerRotation
+					sfxInfo(2, isPlaying) = 1
+				}
+				if ( tripleBulletCountdown >= 1 ) {
+					tripleBulletCountdown -= 1
+					repeat 2
+						gosub *getAvailablePlayerBulletSlot
+						if ( newProjectile >= 0 ) {
+							playerBulletType(newProjectile) = 1
+							reused_1 = (playerRotation + (cnt * 2 - 1) + 16) \ 16 //extra bullet angle
+							playerBulletPos(newProjectile, POS_X) = 160.0 + cos(deg2rad(22.5 * reused_1)) * 10
+							playerBulletPos(newProjectile, VEL_X) = cos(deg2rad(22.5 * reused_1)) * 10
+							playerBulletPos(newProjectile, POS_Y) = 160.0 + sin(deg2rad(22.5 * reused_1)) * 10
+							playerBulletPos(newProjectile, VEL_Y) = sin(deg2rad(22.5 * reused_1)) * 10
+							playerBulletPos(newProjectile, ROT) = 1.0 * reused_1
+							sfxInfo(2, isPlaying) = 1
+						}
+					loop
+				}
+			}
+			if ( keyInfo(KEY_X, pressedTime) == 1 ) {
+				if ( shieldCountdown >= 1 ) {
+					if ( shieldActive == 1 ) {
+						shieldActive = 0
+					}
+					else {
+						shieldActive = 1
+					}
+				}
+				else {
+					shieldActive = 0
+					sfxInfo(23, isPlaying) = 1
+				}
+			}
+			if ( shieldCountdown <= 0 ) {
+				shieldActive = 0
+			}
+			gosub *label_63
+			gosub *label_54
+			if ( shieldActive == 1 ) {
+				shieldCountdown -= 1
+				for projectile,0,maxProjectiles,1
+					if ( enemyProjectileType(projectile) >= 1 ) {
+						enemyDistanceX = 160.0 - enemyProjectilePosition(projectile, POS_X)
+						enemyDistanceY = 160.0 - enemyProjectilePosition(projectile, POS_Y)
+						if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 2000 ) {
+							enemyProjectileType(projectile) = 0
+							sfxInfo(8 + rnd(2), 0) = 1
+							score += 1
+							gosub *getAvailableDeathParticleSlot
+							if ( newDeathP != (-1) ) {
+								deathParticlePosInfo(newDeathP, POS_X) = enemyProjectilePosition(projectile, POS_X)
+								deathParticlePosInfo(newDeathP, POS_Y) = enemyProjectilePosition(projectile, POS_Y)
+								deathParticlePosInfo(newDeathP, VEL_X) = enemyProjectilePosition(projectile, VEL_X)
+								deathParticlePosInfo(newDeathP, VEL_Y) = enemyProjectilePosition(projectile, VEL_Y)
+								deathParticleType(newDeathP) = 16 + rnd(16)
+								deathParticleSize(newDeathP) = 0
+							}
+						}
+					}
+				next
+				if ( shieldSfxLoopTimer == 0 ) {
+					sfxInfo(12, isPlaying) = 1
+				}
+				if ( shieldSfxLoopTimer \ 12 == 0 ) {
+					sfxInfo(22, isPlaying) = 1
+				}
+				shieldSfxLoopTimer += 1
+			}
+			else {
+				shieldSfxLoopTimer = 0
+			}
+			if ( shieldActive == 0 ) {
+
+				// enemy hit player damage calculation
+				// calculates relative to the center of the screen?
+
+				damage = 0
+
+				for projectile,0,maxProjectiles,1
+					if ( enemyProjectileType(projectile) >= 1 ) {
+						enemyDistanceX = 160.0 - enemyProjectilePosition(projectile, POS_X)
+						enemyDistanceY = 160.0 - enemyProjectilePosition(projectile, POS_Y)
+						if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 20 ) {
+							enemyProjectileType(projectile) = 0
+							damage = 1
+						}
+					}
+				next
+				if ( playerDamageBoostCountdown == 0 ) {
+					for enemy,0,maxEnemies,1
+						if ( enemyType(enemy) >= 1 and enemySpawningTimer(enemy) >= 0 ) {
+							enemyDistanceX = 160.0 - enemyPosition(enemy, POS_X)
+							enemyDistanceY = 160.0 - enemyPosition(enemy, POS_Y)
+							if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 120 ) {
+								damage = 2
+							}
+						}
+					next
+				}
+			}
+			if ( roundTimer \ 24 == 0 ) {
+				if ( playerHealth <= 2 ) {
+					sfxInfo(21, isPlaying) = 1
+				}
+				else {
+					if ( playerHealth <= 4 ) {
+						sfxInfo(20, isPlaying) = 1
+					}
+				}
+			}
+			for enemy,0,maxEnemies,1
+				if ( enemyType(enemy) >= 5 and enemyType(enemy) <= 8 ) {
+					enemyDistanceX = 160.0 - enemyPosition(enemy, POS_X)
+					enemyDistanceY = 160.0 - enemyPosition(enemy, POS_Y)
+					if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 200 ) {
+						damage = enemyType(enemy)
+						enemyType(enemy) = 0
+					}
+				}
+			next
+			if ( playerDamageBoostCountdown >= 1 ) {
+				playerDamageBoostCountdown -= 1
+			}
+			if ( damage >= 1 and damage <= 2 and playerDamageBoostCountdown == 0 ) {
+				if ( section <= 47 ) {
+					playerDamageBoostCountdown = 35
+				}
+				else {
+					playerDamageBoostCountdown = 35 / 2
+				}
+				sfxInfo(6, isPlaying) = 1
+				playerHealth -= damage
+			}
+			if ( damage == 5 ) {
+				if ( playerHealth <= 8 ) {
+					playerHealth += 2
+				}
+				else {
+					playerHealth = 10
+				}
+				sfxInfo(15, isPlaying) = 1
+			}
+			if ( damage == 6 ) {
+				tripleBulletCountdown += 50
+				sfxInfo(16, isPlaying) = 1
+			}
+			if ( damage == 7 ) {
+				whiteBulletCountdown += 50
+				sfxInfo(17, isPlaying) = 1
+			}
+			if ( damage == 8 ) {
+				shieldCountdown += 100
+				sfxInfo(18, isPlaying) = 1
+			}
+			if ( damage >= 5 and damage <= 8 ) {
+				sfxInfo(13, isPlaying) = 1
+				repeat 10
+					gosub *getAvailableDeathParticleSlot
+					if ( newDeathP != (-1) ) {
+						deathParticlePosInfo(newDeathP, ROT) = 1.0 * cnt * 360 / 10 + reused_1
+						deathParticlePosInfo(newDeathP, POS_X) = 160.0 + cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 30
+						deathParticlePosInfo(newDeathP, POS_Y) = 160.0 + sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 30
+						deathParticlePosInfo(newDeathP, VEL_X) = cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * (-5) * (cnt \ 2)
+						deathParticlePosInfo(newDeathP, VEL_Y) = sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * (-5) * (cnt \ 2)
+						deathParticleType(newDeathP) = 16 + rnd(16)
+						deathParticleSize(newDeathP) = 0
+					}
+				loop
+			}
+			if ( playerHealth <= 0 ) {
+				roundState = 1 //game over
+			}
+			enemiesOnField = 0
+			repeat maxEnemies
+				if ( enemyType(cnt) >= 1 and enemyType(cnt) <= 4 or enemyType(cnt) >= 9 ) {
+					enemiesOnField += 1
+				}
+			loop
+			if ( enemiesOnField == 0 ) {
+				repeat maxProjectiles
+					if ( enemyProjectileType(cnt) >= 1 ) {
+						gosub *getAvailableDeathParticleSlot
+						if ( newDeathP != (-1) ) {
+							deathParticlePosInfo(newDeathP, POS_X) = enemyProjectilePosition(cnt, POS_X)
+							deathParticlePosInfo(newDeathP, POS_Y) = enemyProjectilePosition(cnt, POS_Y)
+							deathParticlePosInfo(newDeathP, VEL_X) = 0.0
+							deathParticlePosInfo(newDeathP, VEL_Y) = 0.0
+							deathParticleType(newDeathP) = 32
+							deathParticleSize(newDeathP) = 0
+						}
+						enemyProjectileType(cnt) = 0
+					}
+				loop
+			}
+			reused_1 = 0
+			reused_2 = 0
+
+			for var_168,0,var_169,1
+				if ( var_170(var_168) >= 1 ) {
+					reused_1 += 1
+				}
+				reused_2 += var_171(var_168)
+			next
+			if ( sectionFadeTimer >= 1 ) {
+				sectionFadeTimer += 1
+			}
+			if ( keyInfo(KEY_S, pressedTime) == 15 ) {
+				if ( sectionFadeTimer >= 1 ) {
+					sectionFadeTimer = 0
+				}
+				else {
+					sectionFadeTimer = 1
+				}
+				sfxInfo(26, isPlaying) = 1
+			}
+
+			// trigger next section screen
+			if ( reused_1 == 0 and sectionTimer >= 10 and enemiesOnField <= 100 - reused_2 ) {
+				sectionSecondaryTimer += 1
+				if ( keyInfo(KEY_S, pressedTime) >= 1 or sectionFadeTimer >= 1 ) {
+					enemiesOnField = 0
+					proceedToNextSectionTrigger = 1
+				}
+				if ( sectionSecondaryTimer == 0 ) {
+					sfxInfo(25, isPlaying) = 1
+				}
+			}
+			else {
+				sectionSecondaryTimer = 0
+			}
+			if ( sectionTimer == 2 ) {
+				sfxInfo(1, isPlaying) = 1
+			}
+			if ( enemiesOnField <= 0 and proceedToNextSectionTrigger == 1 and section <= 49 ) {
+				sectionTimer = -1
+				section += 1
+				proceedToNextSectionTrigger = 0
+				nextSectionTextFade = 33
+			}
+			if ( sectionTimer == 0 ) {
+				playerAbsoluteX = 160.0
+				playerAbsoluteY = 160.0
+				if ( section != 0 ) {
+					sfxInfo(7, isPlaying) = 1
+				}
+			}
+			playerAbsoluteX -= playerAccelerationX
+			playerAbsoluteY -= playerAccelerationY
+			if ( sectionTimer == 0 ) {
+				if ( section / 8 <= 2 ) {
+					var_169 = section / 8 + 1
+				}
+				else {
+					var_169 = 4
+				}
+				var_178 = 140 + rnd(30) - var_169 * 10
+				dim var_171, var_169
+				dim var_179, var_169
+				var_179 = 2, 1, 3, 4
+				dim var_180, var_169
+				dim var_170, var_169
+				if ( section / 8 <= 2 ) {
+					enemySpawnPositionA = rnd(var_169 + 1)
+				}
+				else {
+					enemySpawnPositionA = 100
+				}
+				for index,0,var_169,1
+					repeat
+						reused_1 = rnd(var_169)
+						if ( var_180(reused_1) == 0 ) {
+							if ( index >= enemySpawnPositionA ) {
+								var_180(reused_1) = index + 2
+							}
+							else {
+								var_180(reused_1) = index + 1
+							}
+							break
+						}
+						await 0
+					loop
+				next
+				if ( section \ 8 == 0 and section / 8 <= 2 ) {
+					var_182 = 0
+				}
+				var_182 += 1
+				var_183 = var_182
+				repeat 100
+					reused_1 = rnd(var_169)
+					var_171(reused_1) += 1
+					var_183 -= var_179(reused_1)
+					if ( var_183 <= 0 ) {
+						break
+					}
+				loop
+				repeat var_169
+					var_171(cnt) += 3
+					if ( section >= 24 ) {
+						var_171(cnt) += 2
+					}
+					var_171(cnt) = var_171(cnt) * 2
+					var_170(cnt) = var_171(cnt)
+				loop
+				var_184 = 0
+				enemySpawnPattern = rnd(6)
+				if ( section == 50 ) {
+					enemySpawnPattern = 13
+				}
+				if ( section \ 8 == 7 ) {
+					enemySpawnPattern = 11 + rnd(2)
+				}
+				var_186 = 0
+			}
+			if ( enemySpawnPattern == 0 ) {
+				if ( sectionTimer \ 2 == 0 and sectionTimer <= 400 ) {
+					for var_168,0,var_169,1
+						if ( var_170(var_168) >= 1 ) {
+							gosub *getAvailableEnemySlot
+							if ( newEnemy != (-1) ) {
+								enemySpawnPositionA = var_170(var_168) * 360 / var_171(var_168) + var_168 * 180 + 180 / var_171(var_168) * var_168
+								enemySpawnPositionB = var_178 + var_168 * 20
+								if ( section >= 24 ) {
+									var_186 = var_170(var_168) \ 2
+								}
+								enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+								enemySpawningTimer(newEnemy) = -16
+								enemyAnimTimer(newEnemy) = 0
+								if ( var_180(var_168) == 1 ) {
+									enemyHealth(newEnemy) = 3
+								}
+								if ( var_180(var_168) == 2 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 3 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 4 ) {
+									enemyHealth(newEnemy) = 3
+								}
+							}
+							var_170(var_168) -= 1
+						}
+					next
+				}
+			}
+			if ( enemySpawnPattern == 1 ) {
+				if ( sectionTimer \ 16 == 0 and sectionTimer / 16 < var_169 ) {
+					var_168 = sectionTimer / 16
+					repeat var_171(var_168)
+						if ( var_170(var_168) >= 1 ) {
+							gosub *getAvailableEnemySlot
+							if ( newEnemy != (-1) ) {
+								enemySpawnPositionA = var_170(var_168) * 360 / var_171(var_168) + var_168 * 180 + 180 / var_171(var_168) * var_168
+								enemySpawnPositionB = var_178 + var_168 * 20
+								if ( section >= 24 ) {
+									var_186 = cnt \ 2
+								}
+								enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+								enemySpawningTimer(newEnemy) = -16
+								enemyAnimTimer(newEnemy) = 0
+								if ( var_180(var_168) == 1 ) {
+									enemyHealth(newEnemy) = 3
+								}
+								if ( var_180(var_168) == 2 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 3 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 4 ) {
+									enemyHealth(newEnemy) = 3
+								}
+							}
+							var_170(var_168) -= 1
+						}
+					loop
+				}
+			}
+			if ( enemySpawnPattern == 2 ) {
+				if ( sectionTimer \ 2 == 0 and sectionTimer <= 400 ) {
+					var_168 = rnd(var_169)
+					if ( var_170(var_168) >= 1 ) {
+						gosub *getAvailableEnemySlot
+						if ( newEnemy != (-1) ) {
+							enemySpawnPositionA = var_170(var_168) * 360 / var_171(var_168) + var_168 * 180 + 180 / var_171(var_168) * var_168 + rnd(30)
+							enemySpawnPositionB = var_178 + rnd(60) - 20
+							if ( section >= 24 ) {
+								var_186 = var_170(var_168) \ 2
+							}
+							enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+							enemySpawningTimer(newEnemy) = -16
+							enemyAnimTimer(newEnemy) = 0
+							if ( var_180(var_168) == 1 ) {
+								enemyHealth(newEnemy) = 3
+							}
+							if ( var_180(var_168) == 2 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( var_180(var_168) == 3 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( var_180(var_168) == 4 ) {
+								enemyHealth(newEnemy) = 3
+							}
+						}
+						var_170(var_168) -= 1
+					}
+				}
+			}
+			if ( enemySpawnPattern == 3 or enemySpawnPattern == 4 ) {
+				if ( sectionTimer \ 4 == 0 and sectionTimer <= 400 ) {
+					var_168 = var_184
+					if ( var_184 < var_169 ) {
+						if ( var_170(var_168) >= 1 ) {
+							repeat 2
+								gosub *getAvailableEnemySlot
+								if ( newEnemy != (-1) ) {
+									enemySpawnPositionA = (var_171(var_168) - var_170(var_168) * 2 + 2) * (var_178 / var_171(var_168)) * (cnt * 2 - 1)
+									enemySpawnPositionB = (var_178 + var_168 * 30) * (cnt * 2 - 1) * 2 / 3
+									if ( section >= 24 ) {
+										var_186 = var_170(var_168) / 2 \ 2
+									}
+									if ( enemySpawnPattern == 3 ) {
+										enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + enemySpawnPositionA
+										enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + enemySpawnPositionB
+									}
+									if ( enemySpawnPattern == 4 ) {
+										enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + enemySpawnPositionB
+										enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + enemySpawnPositionA
+									}
+									enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+									enemySpawningTimer(newEnemy) = -16
+									enemyAnimTimer(newEnemy) = 0
+									if ( var_180(var_168) == 1 ) {
+										enemyHealth(newEnemy) = 3
+									}
+									if ( var_180(var_168) == 2 ) {
+										enemyHealth(newEnemy) = 2
+									}
+									if ( var_180(var_168) == 3 ) {
+										enemyHealth(newEnemy) = 2
+									}
+									if ( var_180(var_168) == 4 ) {
+										enemyHealth(newEnemy) = 3
+									}
+								}
+							loop
+							var_170(var_168) -= 2
+						}
+						else {
+							var_184 += 1
+						}
+					}
+				}
+			}
+			if ( enemySpawnPattern == 5 ) {
+				if ( sectionTimer \ 4 == 0 and sectionTimer <= 400 ) {
+					var_168 = var_184
+					if ( var_184 < var_169 ) {
+						if ( var_170(var_168) >= 1 ) {
+							repeat 2
+								gosub *getAvailableEnemySlot
+								if ( newEnemy != (-1) ) {
+									enemySpawnPositionA = sectionTimer / 2 * 170 / var_171(0) + cnt * 180
+									enemySpawnPositionB = var_178 + sectionTimer - var_169 * 5
+									if ( section >= 24 ) {
+										var_186 = var_170(var_168) / 2 \ 2
+									}
+									enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+									enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+									enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+									enemySpawningTimer(newEnemy) = -16
+									enemyAnimTimer(newEnemy) = 0
+									if ( var_180(var_168) == 1 ) {
+										enemyHealth(newEnemy) = 3
+									}
+									if ( var_180(var_168) == 2 ) {
+										enemyHealth(newEnemy) = 2
+									}
+									if ( var_180(var_168) == 3 ) {
+										enemyHealth(newEnemy) = 2
+									}
+									if ( var_180(var_168) == 4 ) {
+										enemyHealth(newEnemy) = 3
+									}
+								}
+							loop
+							var_170(var_168) -= 2
+						}
+						if ( var_170(var_168) <= 0 ) {
+							var_184 += 1
+						}
+					}
+				}
+			}
+			if ( enemySpawnPattern == 11 ) {
+				if ( sectionTimer \ 2 == 0 and sectionTimer <= section * 20 ) {
+					var_168 = var_184
+					if ( var_184 < var_169 ) {
+						if ( var_170(var_168) >= 1 ) {
+							gosub *getAvailableEnemySlot
+							if ( newEnemy != (-1) ) {
+								enemySpawnPositionA = sectionTimer * 122
+								enemySpawnPositionB = var_178
+								if ( section >= 24 ) {
+									var_186 = sectionTimer / 2 \ 2
+								}
+								enemyPosition(newEnemy, POS_X) = 1.0 * 160 + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyPosition(newEnemy, POS_Y) = 1.0 * 160 + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+								enemySpawningTimer(newEnemy) = -16
+								enemyAnimTimer(newEnemy) = 0
+								if ( var_180(var_168) == 1 ) {
+									enemyHealth(newEnemy) = 3
+								}
+								if ( var_180(var_168) == 2 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 3 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 4 ) {
+									enemyHealth(newEnemy) = 3
+								}
+							}
+							var_170(var_168) -= 1
+						}
+						if ( var_170(var_168) <= 0 ) {
+							var_184 += 1
+							var_170(var_168) = var_171(var_168)
+						}
+						if ( var_184 >= var_169 ) {
+							var_184 = 0
+						}
+					}
+				}
+				if ( sectionTimer == section * 20 + 5 ) {
+					dim var_170, var_169
+				}
+			}
+			if ( enemySpawnPattern == 12 ) {
+				if ( sectionTimer \ 2 == 0 and sectionTimer <= section * 20 ) {
+					var_168 = var_184
+					if ( var_184 < var_169 ) {
+						if ( var_170(var_168) >= 1 ) {
+							gosub *getAvailableEnemySlot
+							if ( newEnemy != (-1) ) {
+								enemySpawnPositionA = sectionTimer * 122 + rnd(30)
+								enemySpawnPositionB = var_178 + rnd(60) - 20
+								if ( section >= 24 ) {
+									var_186 = sectionTimer / 2 \ 2
+								}
+								enemyPosition(newEnemy, POS_X) = 1.0 * 160 + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyPosition(newEnemy, POS_Y) = 1.0 * 160 + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+								enemyType(newEnemy) = var_180(var_168) + var_186 * 8
+								enemySpawningTimer(newEnemy) = -16
+								enemyAnimTimer(newEnemy) = 0
+								if ( var_180(var_168) == 1 ) {
+									enemyHealth(newEnemy) = 3
+								}
+								if ( var_180(var_168) == 2 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 3 ) {
+									enemyHealth(newEnemy) = 2
+								}
+								if ( var_180(var_168) == 4 ) {
+									enemyHealth(newEnemy) = 3
+								}
+							}
+							var_170(var_168) -= 1
+						}
+						if ( var_170(var_168) <= 0 ) {
+							var_184 += 1
+							var_170(var_168) = var_171(var_168)
+						}
+						if ( var_184 >= var_169 ) {
+							var_184 = 0
+						}
+					}
+				}
+				if ( sectionTimer == section * 20 + 5 ) {
+					dim var_170, var_169
+				}
+			}
+			if ( enemySpawnPattern == 13 ) {
+				if ( sectionTimer \ 2 == 0 ) {
+					reused_3 = 1
+					reused_3 += sectionTimer / 384
+					repeat reused_3
+						gosub *getAvailableEnemySlot
+						if ( newEnemy != (-1) ) {
+							enemySpawnPositionA = rnd(360)
+							enemySpawnPositionB = var_178 + rnd(60) - 20
+							var_168 = rnd(4) + 1
+							if ( section >= 24 ) {
+								var_186 = sectionTimer / 2 \ 2
+							}
+							enemyPosition(newEnemy, POS_X) = 1.0 * 160 + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyPosition(newEnemy, POS_Y) = 1.0 * 160 + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyType(newEnemy) = var_168 + var_186 * 8
+							enemySpawningTimer(newEnemy) = -16
+							enemyAnimTimer(newEnemy) = 60
+							if ( var_168 == 1 ) {
+								enemyHealth(newEnemy) = 3
+							}
+							if ( var_168 == 2 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( var_168 == 3 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( var_168 == 4 ) {
+								enemyHealth(newEnemy) = 3
+							}
+						}
+					loop
+				}
+			}
+			if ( enemySpawnPattern == 10 ) {
+				reused_1 = 4
+				if ( sectionTimer \ 2 == 0 and sectionTimer <= 400 ) {
+					if ( 1 >= 1 ) {
+						gosub *getAvailableEnemySlot
+						if ( newEnemy != (-1) ) {
+							enemySpawnPositionA = sectionTimer * 10
+							enemySpawnPositionB = 100 + sectionTimer
+							if ( section >= 24 ) {
+								var_186 = sectionTimer / 2 \ 2
+							}
+							enemyPosition(newEnemy, POS_X) = 1.0 * playerAbsoluteX + cos(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyPosition(newEnemy, POS_Y) = 1.0 * playerAbsoluteY + sin(deg2rad(enemySpawnPositionA)) * enemySpawnPositionB
+							enemyType(newEnemy) = reused_1 + var_186
+							enemySpawningTimer(newEnemy) = -16
+							enemyAnimTimer(newEnemy) = 0
+							if ( reused_1 == 1 ) {
+								enemyHealth(newEnemy) = 3
+							}
+							if ( reused_1 == 2 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( reused_1 == 3 ) {
+								enemyHealth(newEnemy) = 2
+							}
+							if ( reused_1 == 4 ) {
+								enemyHealth(newEnemy) = 3
+							}
+						}
+						var_170(var_168) -= 1
+					}
+				}
+			}
+			if ( sectionTimer == 50 ) {
+				proceedToNextSectionTrigger = 1
+			}
+			gosub *getAvailableEnemySlot
+			sectionTimer += 1
+			if ( postComboEndedTimer >= 1 ) {
+				postComboEndedTimer -= 1
+			}
+			if ( playerHealth <= 0 and comboHealth >= 1 ) {
+				comboHealth = 1
+			}
+			if ( comboHealth >= 1 ) {
+				if ( comboHealth == 1 ) {
+					if ( scoreMultiplier >= 1 ) {
+						scoreMultiplierWhenComboEnded = scoreMultiplier
+						postComboEndedTimer = 15
+						score += section * (scoreMultiplier + 1) * 10
+					}
+					scoreMultiplier = 0
+				}
+				if ( postComboEndedTimer == 15 ) {
+					if ( scoreMultiplierWhenComboEnded >= 10 and scoreMultiplierWhenComboEnded <= 49 ) {
+						sfxInfo(55, isPlaying) = 1
+					}
+					if ( scoreMultiplierWhenComboEnded >= 50 ) {
+						sfxInfo(56, isPlaying) = 1
+					}
+				}
+				comboHealth -= 1
+				comboNumberEnemyPosX -= 1.0 * playerAccelerationX
+				comboNumberEnemyPosY -= 1.0 * playerAccelerationY
+			}
+			if ( nextSectionBackgroundTimer >= 1 ) {
+				nextSectionBackgroundTimer -= 1
+			}
+			if ( nextSectionTextFade >= 1 ) {
+				nextSectionTextFade -= 1
+			}
+			backgroundScrollX -= 1.0 * playerAccelerationX
+			backgroundScrollY -= 1.0 * playerAccelerationY
+			if ( backgroundScrollX > 32 ) {
+				backgroundScrollX -= 32.0
+			}
+			if ( backgroundScrollX < 0.0 ) {
+				backgroundScrollX += 32.0
+			}
+			if ( backgroundScrollY > 32 ) {
+				backgroundScrollY -= 32.0
+			}
+			if ( backgroundScrollY < 0.0 ) {
+				backgroundScrollY += 32.0
+			}
+			if ( keyInfo(KEY_C, pressedTime) == 1 ) {
+				roundState = 2
+				sfxInfo(51, isPlaying) = 1
+				backgroundTileSelectedBrightnessPause = roundTimer
+				cursorPos = 0
+				UIAnimStep = 0
+				playerCanShoot = 1
+			}
+			roundNotPausedTimer += 1
+		}
+		else {
+			if ( roundState == 1 ) {       // game over
+				if ( gameOverTimer == 0 ) {
+					sfxInfo(6, isPlaying) = 1
+					repeat 100
+						ds_stop soundBufferBaseID + cnt
+					loop
+					ds_play soundBufferBaseID + 50
+					playerAccelerationX = 0
+					playerAccelerationY = 0
+					isNewHighScore = 0
+					repeat 10
+						if ( isNewHighScore == 0 ) {
+							if ( scores(cnt) <= score ) {
+								oldScore = scores(cnt)
+								scores(cnt) = score
+								isNewHighScore = 1
+							}
+						}
+						else {
+							newScore = scores(cnt)
+							scores(cnt) = oldScore
+							oldScore = newScore
+						}
+					loop
+				}
+				gameOverTimer += 1
+				if ( keyInfo(KEY_R, pressedTime) == 1 ) {
+					sfxInfo(24, isPlaying) = 1
+					goto *roundStart
+				}
+				if ( keyInfo(KEY_T, pressedTime) == 1 ) {
+					goto *titleScreen
+				}
+			}
+			else {
+				if ( roundState == 2 ) {                   // pause
+					UIAnimStep += 1
+					if ( playerCanShoot == 0 ) {
+						if ( keyInfo(KEY_C, pressedTime) == 1 ) {
+							roundState = 0
+							sfxInfo(51, isPlaying) = 1
+						}
+						if ( keyInfo(KEY_R, pressedTime) == 1 ) {
+							sfxInfo(24, isPlaying) = 1
+							goto *roundStart
+						}
+						if ( keyInfo(KEY_T, pressedTime) == 1 ) {
+							goto *titleScreen
+						}
+						if ( keyInfo(KEY_UP, pressedTime) == 1 ) {
+							cursorPos = (cursorPos + 3) \ 4
+							sfxInfo(52, isPlaying) = 1
+						}
+						if ( keyInfo(KEY_DOWN, pressedTime) == 1 ) {
+							cursorPos = (cursorPos + 1) \ 4
+							sfxInfo(52, isPlaying) = 1
+						}
+						if ( cursorPos == 0 and keyInfo(KEY_Z, pressedTime) ) {
+							roundState = 0
+							sfxInfo(51, isPlaying) = 1
+							playerCanShoot = 1
+						}
+						if ( cursorPos == 1 and keyInfo(KEY_LEFT, pressedTime) * keyInfo(KEY_RIGHT, pressedTime) == 0 ) {
+							if ( keyInfo(KEY_LEFT, pressedTime) == 1 or keyInfo(KEY_LEFT, pressedTime) >= 8 ) {
+								if ( sfxVolume >= 5 ) {
+									sfxVolume -= 5
+									gosub *updateVolume
+									sfxInfo(52, isPlaying) = 1
+								}
+							}
+							if ( keyInfo(KEY_RIGHT, pressedTime) == 1 or keyInfo(KEY_RIGHT, pressedTime) >= 8 ) {
+								if ( sfxVolume <= 95 ) {
+									sfxVolume += 5
+									gosub *updateVolume
+									sfxInfo(52, isPlaying) = 1
+								}
+							}
+						}
+						if ( cursorPos == 2 and keyInfo(KEY_LEFT, pressedTime) * keyInfo(KEY_RIGHT, pressedTime) == 0 ) {
+							if ( keyInfo(KEY_LEFT, pressedTime) == 1 or keyInfo(KEY_LEFT, pressedTime) >= 8 ) {
+								if ( musicVolume >= 5 ) {
+									musicVolume -= 5
+									gosub *updateVolume
+									sfxInfo(52, isPlaying) = 1
+								}
+							}
+							if ( keyInfo(KEY_RIGHT, pressedTime) == 1 or keyInfo(KEY_RIGHT, pressedTime) >= 8 ) {
+								if ( musicVolume <= 95 ) {
+									musicVolume += 5
+									gosub *updateVolume
+									sfxInfo(52, isPlaying) = 1
+								}
+							}
+						}
+						if ( cursorPos == 3 and keyInfo(KEY_Z, pressedTime) == 1 ) {
+							screenSize = (screenSize + 1) \ 2
+							sfxInfo(53, isPlaying) = 1
+							gosub *changeScreenSize
+						}
+					}
+					else {
+						if ( UIAnimStep == 1 ) {
+							cursorPos = 0
+						}
+						if ( keyInfo(KEY_LEFT, pressedTime) + keyInfo(KEY_UP, pressedTime) + keyInfo(KEY_RIGHT, pressedTime) + keyInfo(KEY_DOWN, pressedTime) + keyInfo(KEY_Z, pressedTime) == 0 ) {
+							playerCanShoot = 0
+						}
+					}
+				}
+			}
+		}
+		if ( roundState != 1 ) {
+			if ( loopingRoundMusicTimer == 0 ) {
+				reused_1 = 0
+				if ( var_201 < section / 2 ) {
+					reused_1 = 1
+				}
+				if ( section >= 48 ) {
+					reused_1 = 1
+				}
+				if ( roundState == 2 ) {
+					reused_1 = 0
+				}
+				if ( var_102(loopingRoundMusicID) == 1 ) {
+					reused_1 = 1
+				}
+				if ( reused_1 == 1 ) {
+					var_201 += 1
+					if ( loopingRoundMusicID == 5 ) {
+						sfxInfo(4, isPlaying) = 1
+					}
+					if ( loopingRoundMusicID == 5 and reused_1 == 1 and rnd(3) == 0 ) {
+						loopingRoundMusicID = 16
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 5 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 15
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 6 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 16
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 7 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 2
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 10 and reused_1 == 1 and rnd(3) == 0 ) {
+						loopingRoundMusicID = 2
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 11 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 5
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 12 and reused_1 == 1 and rnd(3) == 0 ) {
+						loopingRoundMusicID = 3
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 12 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 15
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 14 and reused_1 == 1 ) {
+						loopingRoundMusicID = 3
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 15 and reused_1 == 1 ) {
+						loopingRoundMusicID = 9
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 17 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 3
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 19 and reused_1 == 1 and rnd(2) == 0 ) {
+						loopingRoundMusicID = 9
+						reused_1 = 0
+					}
+					if ( loopingRoundMusicID == 19 and reused_1 == 1 ) {
+						loopingRoundMusicID = 3
+						reused_1 = 0
+					}
+					if ( reused_1 == 1 ) {
+						loopingRoundMusicID += 1
+					}
+				}
+				shouldRestartRoundMusic = 1
+				if ( var_204 != loopingRoundMusicID ) {
+					sfxInfo(0, isPlaying) = 1
+					nextSectionBackgroundTimer = 32
+				}
+				loopingRoundMusicTimer = 12 * 16 * (var_101(loopingRoundMusicID) + 1)
+			}
+			loopingRoundMusicTimer -= 1
+		}
+		if ( keyInfo(KEY_O, pressedTime) >= 1 and keyInfo(KEY_Q, pressedTime) == 1 ) {
+			section += 1
+		}
+		if ( score >= 10000000 ) {
+			score = 99999999
+		}
+		gosub *playSfx
+		gosub *loopRoundMusic
+		if ( (roundTimer + 10) * 1000 * 60 / 140 / 12 >= currentTime ) {
+			redraw 0
+			gsel 0
+			color 0, 0, 0
+			boxf
+			gmode gmode_gdi, , , 256
+			if ( section >= 8 and gameOverTimer == 0 ) {
+				if ( roundState == 0 ) {
+					backgroundTileSelectedBrightness = roundTimer / 12 \ 8
+				}
+				else {
+					backgroundTileSelectedBrightness = backgroundTileSelectedBrightnessPause / 12 \ 8
+				}
+			}
+			else {
+				backgroundTileSelectedBrightness = 0
+			}
+			if ( section >= 16 and gameOverTimer == 0 ) {
+				backgroundTileSelectedPattern = (section - 16) / 8 + 1
+			}
+			else {
+				backgroundTileSelectedPattern = 0
+			}
+			repeat 10 * 10
+				pos cnt \ 10 * 32 + backgroundScrollX, cnt / 10 * 24 + backgroundScrollY * 3 / 4
+				gcopy 2, backgroundTileSelectedPattern * 32 + 224, backgroundTileSelectedBrightness * 24, 32, 24
+			loop
+			repeat 10
+				pos 0, cnt * 24 + backgroundScrollY * 3 / 4
+				gcopy 2, backgroundTileSelectedPattern * 32 + 224 + 32 - backgroundScrollX, backgroundTileSelectedBrightness * 24, backgroundScrollX, 24
+				pos cnt * 32 + backgroundScrollX, 0
+				gcopy 2, backgroundTileSelectedPattern * 32 + 224, backgroundTileSelectedBrightness * 24 + 24 - backgroundScrollY * 3 / 4, 32, backgroundScrollY * 3 / 4
+			loop
+			pos 0, 0
+			gcopy 2, backgroundTileSelectedPattern * 32 + 224 + 32 - backgroundScrollX, backgroundTileSelectedBrightness * 24 + 24 - backgroundScrollY * 3 / 4, backgroundScrollX, backgroundScrollY * 3 / 4
+			repeat 32
+				color 255, 0, 0
+				if ( cnt \ 4 == 0 ) {
+					line cnt * 10, 234, cnt * 10, 240
+					if ( cnt \ 8 == 0 ) {
+						line cnt * 10, 232, cnt * 10, 240
+						if ( cnt \ 16 == 0 ) {
+							line cnt * 10, 230, cnt * 10, 240
+						}
+					}
+				}
+				else {
+					line cnt * 10, 238, cnt * 10, 240
+				}
+			loop
+			boxf roundTimer / 12 \ 32 * 10 + 2, 232, roundTimer / 12 \ 32 * 10 + 8, 240
+			var_205 = 0
+			repeat maxEnemies
+				if ( enemyType(cnt) >= 1 ) {
+					//rakubloat: what?????
+					if ( enemySpawningTimer(cnt) == 0 ) {
+						gmode gmode_rgb0, , , 256
+					}
+					else {
+						gmode gmode_rgb0, , , 256
+					}
+				}
+				if ( enemyType(cnt) == 1 or enemyType(cnt) == 1 + 8 ) {
+					if ( enemyType(cnt) <= 4 ) {
+						var_111 = 0
+					}
+					else {
+						var_111 = 8
+					}
+					pos enemyPosition(cnt, POS_X) - 8, enemyPosition(cnt, POS_Y) * 3 / 4 - 16
+					if ( enemySpawningTimer(cnt) >= 0 ) {
+						if ( enemyAnimTimer(cnt) >= 0 ) {
+							gcopy 3 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, enemyAnimTimer(cnt) / 10 \ 3 * 32, 16, 32
+						}
+						else {
+							gcopy 3 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, 4 * 32, 16, 32
+						}
+					}
+					else {
+						gcopy 3 + var_111, 256 + enemySpawningTimer(cnt) * 16, 96, 16, 32
+					}
+				}
+				if ( enemyType(cnt) == 2 or enemyType(cnt) == 2 + 8 ) {
+					if ( enemyType(cnt) <= 4 ) {
+						var_111 = 0
+					}
+					else {
+						var_111 = 6
+					}
+					pos enemyPosition(cnt, POS_X) - 8, enemyPosition(cnt, POS_Y) * 3 / 4 - 16
+					if ( enemySpawningTimer(cnt) >= 0 ) {
+						enemySpawnAnimFrame = enemyAnimTimer(cnt) / 6 \ 2 * 8
+						if ( enemyAnimTimer(cnt) <= (-1) ) {
+							enemySpawnAnimFrame = 0
+						}
+						if ( enemyAnimTimer(cnt) >= 17 and enemyAnimTimer(cnt) <= 17 ) {
+							enemySpawnAnimFrame = 1
+						}
+						if ( enemyAnimTimer(cnt) >= 18 and enemyAnimTimer(cnt) <= 19 ) {
+							enemySpawnAnimFrame = 2
+						}
+						if ( enemyAnimTimer(cnt) >= 20 and enemyAnimTimer(cnt) <= 23 ) {
+							enemySpawnAnimFrame = 3
+						}
+						if ( enemyAnimTimer(cnt) >= 24 and enemyAnimTimer(cnt) <= 27 ) {
+							enemySpawnAnimFrame = 4
+						}
+						if ( enemyAnimTimer(cnt) >= 28 and enemyAnimTimer(cnt) <= 30 ) {
+							enemySpawnAnimFrame = 5
+						}
+						if ( enemyAnimTimer(cnt) >= 31 and enemyAnimTimer(cnt) <= 32 ) {
+							enemySpawnAnimFrame = 6
+						}
+						if ( enemyAnimTimer(cnt) >= 33 and enemyAnimTimer(cnt) <= 34 ) {
+							enemySpawnAnimFrame = 7
+						}
+						gcopy 6 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, enemySpawnAnimFrame * 32, 16, 32
+					}
+					else {
+						gcopy 6 + var_111, 256 + enemySpawningTimer(cnt) * 16, 288, 16, 32
+					}
+				}
+				if ( enemyType(cnt) == 3 or enemyType(cnt) == 3 + 8 ) {
+					if ( enemyType(cnt) <= 4 ) {
+						var_111 = 0
+					}
+					else {
+						var_111 = 6
+					}
+					pos enemyPosition(cnt, POS_X) - 8, enemyPosition(cnt, POS_Y) * 3 / 4 - 16
+					if ( enemySpawningTimer(cnt) >= 0 ) {
+						if ( enemyAnimTimer(cnt) >= 0 ) {
+							gcopy 7 + var_111, int((enemyPosition(cnt, ROT) + 180) / 22.5 + 0.5) \ 16 * 16, 0, 16, 32
+						}
+						else {
+							if ( enemyAnimTimer(cnt) <= (-6) and enemyAnimTimer(cnt) >= (-8) ) {
+								reused_1 = 3
+							}
+							if ( enemyAnimTimer(cnt) <= (-4) and enemyAnimTimer(cnt) >= (-5) ) {
+								reused_1 = 2
+							}
+							if ( enemyAnimTimer(cnt) <= (-1) and enemyAnimTimer(cnt) >= (-3) ) {
+								reused_1 = 1
+							}
+							gcopy 7 + var_111, int((enemyPosition(cnt, ROT) + 180) / 22.5 + 0.5) \ 16 * 16, reused_1 * 32, 16, 32
+						}
+					}
+					else {
+						gcopy 7 + var_111, 256 + enemySpawningTimer(cnt) * 16, 128, 16, 32
+					}
+				}
+				if ( enemyType(cnt) == 4 or enemyType(cnt) == 4 + 8 ) {
+					if ( enemyType(cnt) <= 4 ) {
+						var_111 = 0
+					}
+					else {
+						var_111 = 6
+					}
+					pos enemyPosition(cnt, POS_X) - 8, enemyPosition(cnt, POS_Y) * 3 / 4 - 16
+					if ( enemySpawningTimer(cnt) >= 0 ) {
+						if ( enemyAnimTimer(cnt) >= 0 ) {
+							if ( enemyAnimTimer(cnt) >= 58 ) {
+								gcopy 8 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, 32 * 6, 16, 32
+							}
+							else {
+								if ( enemyAnimTimer(cnt) >= 56 ) {
+									gcopy 8 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, 32 * 7, 16, 32
+								}
+								else {
+									if ( enemyAnimTimer(cnt) >= 55 ) {
+										gcopy 8 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, 32 * 6, 16, 32
+									}
+									else {
+										gcopy 8 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, enemyAnimTimer(cnt) / 6 \ 4 * 32, 16, 32
+									}
+								}
+							}
+						}
+						else {
+							gcopy 8 + var_111, int(enemyPosition(cnt, ROT) / 22.5 + 0.5) \ 16 * 16, 32 * 5, 16, 32
+						}
+					}
+					else {
+						gcopy 8 + var_111, 256 + enemySpawningTimer(cnt) * 16, 32 * 4, 16, 32
+					}
+				}
+				if ( enemyType(cnt) >= 5 and enemyType(cnt) <= 8 ) {
+					pos enemyPosition(cnt, POS_X) - 8, enemyPosition(cnt, POS_Y) * 3 / 4
+					if ( enemyAnimTimer(cnt) >= 70 ) {
+						color 0, 0, 0
+						gmode gmode_rgb0alpha, , , enemyAnimTimer(cnt) \ 2 * 192 + 32
+					}
+					else {
+						gmode gmode_rgb0, , , 256
+					}
+					if ( gameOverTimer == 0 ) {
+						gcopy 5, roundNotPausedTimer / 2 \ 4 * 16, (enemyType(cnt) - 5) * 16, 16, 16
+					}
+					else {
+						gcopy 5, 0, (enemyType(cnt) - 5) * 16, 16, 16
+					}
+					if ( roundNotPausedTimer \ 12 <= 2 and gameOverTimer == 0 ) {
+						gcopy 5, 64, 0, 16, 16
+					}
+				}
+				if ( cnt != maxEnemies - 1 ) {
+
+					// draw player
+
+					if ( enemyPosition(cnt + 1, POS_Y) >= 160 and var_205 == 0 or cnt == maxEnemies - 2 and var_205 == 0 ) {
+						pos 160 - 8, 160 * 3 / 4 - 16
+						color 0, 0, 0
+						if ( roundState == 0 or roundState == 2 ) {
+							if ( playerDamageBoostCountdown >= 1 ) {
+								gmode gmode_rgb0alpha, , , playerDamageBoostCountdown \ 2 * 192 + 32
+							}
+							else {
+								gmode gmode_rgb0, , , 256
+							}
+							if ( playerWalkAnimFrame == 0 ) {
+								gcopy 10, 8 * 16, playerRotation * 32, 16, 32
+							}
+							else {
+								gcopy 10, playerWalkAnimFrame / 2 \ 8 * 16, playerRotation * 32, 16, 32
+							}
+							var_205 = 1
+						}
+						else {
+							if ( roundState == 1 ) {
+
+								// player game over animation
+
+								gmode gmode_rgb0, , , 256
+								if ( gameOverTimer <= 16 ) {
+									gcopy 10, 8 * 16, gameOverTimer \ 4 * 32 * 4, 16, 32
+								}
+								else {
+									if ( gameOverTimer <= 24 ) {
+										gcopy 10, 8 * 16, (gameOverTimer - 4) \ 8 * 32 * 2, 16, 32
+									}
+									else {
+										if ( gameOverTimer <= 34 ) {
+											gcopy 10, 8 * 16, (gameOverTimer + 16) \ 16 * 32, 16, 32
+										}
+										else {
+											if ( gameOverTimer <= 58 ) {
+												gcopy 10, 10 * 16 + (gameOverTimer - 35) / 2 \ 16 * 16, 0, 16, 32
+											}
+											else {
+												gcopy 10, 10 * 16, 32, 16, 32
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			loop
+			repeat maxProjectiles
+
+				//draw player bullets
+
+				if ( playerBulletType(cnt) == 1 ) {
+					gmode gmode_add, , , 256
+					pos playerBulletPos(cnt, POS_X) - 4, playerBulletPos(cnt, POS_Y) * 3 / 4 - 4
+					gcopy 2, playerBulletPos(cnt, ROT) \ 8 * 8, 0, 8, 8
+				}
+				if ( playerBulletType(cnt) == 2 ) {
+					gmode gmode_add, , , 256
+					pos playerBulletPos(cnt, POS_X) - 4, playerBulletPos(cnt, POS_Y) * 3 / 4 - 4
+					gcopy 2, playerBulletPos(cnt, ROT) \ 8 * 8, 8 * 5, 8, 8
+				}
+			loop
+			repeat 5
+				// draws shield balls around player
+				if ( shieldActive == 1 ) {
+					gmode gmode_add, , , 256
+					pos cos(deg2rad(roundNotPausedTimer * 13 + cnt * 72)) * 40 + 160 - 4, sin(deg2rad(roundNotPausedTimer * 13 + cnt * 72)) * 30 + 120 - 4
+					gcopy 2, (shieldCountdown + cnt) \ 6 * 8, 32, 8, 8
+				}
+			loop
+
+			// draw enemy projectile
+
+			repeat maxProjectiles
+				if ( enemyProjectileType(cnt) >= 1 ) {
+					gmode gmode_add, , , 256
+					pos enemyProjectilePosition(cnt, POS_X) - 4, enemyProjectilePosition(cnt, POS_Y) * 3 / 4 - 4
+				}
+				
+				// yellow enemy projectile
+				if ( gameOverTimer == 0 ) {
+					if ( enemyProjectileType(cnt) == 1 ) {
+						gcopy 2, (roundNotPausedTimer + cnt) \ 4 * 8, 8, 8, 8
+					}
+					if ( enemyProjectileType(cnt) == 2 ) {
+						gcopy 2, (roundNotPausedTimer + cnt) \ 4 * 8, 16, 8, 8
+					}
+				}
+				else {
+					if ( enemyProjectileType(cnt) == 1 ) {
+						gcopy 2, cnt \ 4 * 8, 8, 8, 8
+					}
+					if ( enemyProjectileType(cnt) == 2 ) {
+						gcopy 2, cnt \ 4 * 8, 16, 8, 8
+					}
+				}
+				// purple roaming bullet
+				if ( enemyProjectileType(cnt) == 3 ) {
+					gcopy 2, int((enemyProjectilePosition(cnt, ROT) / 12 + 1) \ 16) * 8, 24, 8, 8
+				}
+			loop
+			repeat maxDeathParticles
+				if ( deathParticleType(cnt) >= 1 ) {
+					if ( deathParticleSize(cnt) == 0 ) {
+						if ( deathParticleType(cnt) <= 10 ) {
+							deathParticleAnimFrame = (deathParticleType(cnt) - 1) / 2
+						}
+						else {
+							deathParticleAnimFrame = 5
+						}
+						gmode gmode_rgb0, , , 16
+						pos deathParticlePosInfo(cnt, POS_X) - 4, deathParticlePosInfo(cnt, POS_Y) * 3 / 4 - 4
+						gcopy 4, int((deathParticlePosInfo(cnt, ROT) / 12 + 2) \ 32) * 8, deathParticleAnimFrame * 8, 8, 8
+					}
+					if ( deathParticleSize(cnt) == 1 ) {
+						if ( deathParticleType(cnt) <= 10 ) {
+							deathParticleAnimFrame = (deathParticleType(cnt) - 1) / 2
+						}
+						else {
+							deathParticleAnimFrame = 4
+						}
+						gmode gmode_rgb0, , , 16
+						pos deathParticlePosInfo(cnt, POS_X) - 4, deathParticlePosInfo(cnt, POS_Y) * 3 / 4 - 4
+						gcopy 4, (roundNotPausedTimer + cnt) \ 16 * 16, (deathParticleAnimFrame + 3) * 16, 16, 16
+					}
+					if ( deathParticleSize(cnt) == 2 ) {
+						deathParticleAnimFrame = deathParticleType(cnt) * 6 / 32
+						gmode gmode_rgb0, , , 16
+						pos deathParticlePosInfo(cnt, POS_X) - 16, deathParticlePosInfo(cnt, POS_Y) * 3 / 4 - 16
+						gcopy 4, int((deathParticlePosInfo(cnt, ROT) / 12 + 2) \ 32) * 32, deathParticleAnimFrame * 32 + 128, 32, 32
+					}
+				}
+			loop
+			if ( comboHealth >= 1 and scoreMultiplier >= 1 and postComboEndedTimer <= 0 ) {
+				var_206 = str(scoreMultiplier + 1)
+				getstr nullptr, var_206, 0
+				for index,0,strsize,1
+					if ( roundState == 0 ) {
+						reused_1 = rnd(2)
+					}
+					else {
+						reused_1 = 0
+					}
+					pos comboNumberEnemyPosX - 2 * strsize + index * 7, comboNumberEnemyPosY * 3 / 4 - 30 + comboHealth * comboHealth * comboHealth / 400
+					gcopy 2, 128 + int(strmid(var_206, index, 1)) * 7, 248 + reused_1 * 12, 6, 12
+				next
+			}
+			color 0, 0, 0
+			boxf 0, 0, 320, 16
+			boxf 0, 223, 320, 240
+			if ( comboHealth >= 1 and scoreMultiplier >= 1 and postComboEndedTimer <= 0 ) {
+				for index,0,strsize,1
+					if ( roundState == 0 ) {
+						reused_1 = rnd(2)
+					}
+					else {
+						reused_1 = 0
+					}
+					pos 82 + index * 7, 4
+					gcopy 2, 128 + int(strmid(var_206, index, 1)) * 7, 248 + reused_1 * 12, 6, 12
+				next
+				pos 82 + index * 7, 8
+				gcopy 2, 208, 248, comboHealth, 8
+			}
+			if ( postComboEndedTimer >= 1 ) {
+				var_206 = str(scoreMultiplierWhenComboEnded + 1)
+				getstr nullptr, var_206, 0
+				gmode gmode_add, 0, 0, postComboEndedTimer * 28
+				for index,0,strsize,1
+					pos 82 + index * 7, 4
+					gcopy 2, 128 + int(strmid(var_206, index, 1)) * 7, 272, 6, 12
+				next
+			}
+			gmode gmode_add, , , 256
+			pos 1, 223
+			gcopy 2, 0, 216, 40, 16
+			if ( roundState != 2 ) {
+
+				//this seems to be a crude attempt at interpolation for the ui string of the score value
+				//(the one displayed on the left corner of the screen)
+
+				if ( scoreNumberInterpolation <= score - 1 ) {
+					scoreNumberInterpolation += 1
+				}
+				if ( scoreNumberInterpolation <= score - 20 ) {
+					scoreNumberInterpolation += 8
+				}
+				if ( scoreNumberInterpolation <= score - 140 ) {
+					scoreNumberInterpolation += 70
+				}
+				if ( scoreNumberInterpolation <= score - 700 ) {
+					scoreNumberInterpolation += 300
+				}
+				if ( scoreNumberInterpolation <= score - 1400 ) {
+					scoreNumberInterpolation += 300
+				}
+				if ( scoreNumberInterpolation <= score - 5000 ) {
+					scoreNumberInterpolation += 3000
+				}
+			}
+			var_206 = str(scoreNumberInterpolation)
+			getstr nullptr, var_206, 0
+
+			for index,0,strsize,1
+				pos 49 + index * 8, 223
+				gcopy 2, int(strmid(var_206, index, 1)) * 8, 232, 7, 16
+			next
+
+			pos 241, 223
+			gcopy 2, 96, 216, 56, 16
+			var_206 = str(section)
+			getstr nullptr, var_206, 0
+
+			for index,0,strsize,1
+				pos 304 + index * 8, 223
+				gcopy 2, int(strmid(var_206, index, 1)) * 8, 232, 7, 16
+			next
+			gmode gmode_add, , , 256
+			if ( playerHealth >= 1 ) {
+				repeat playerHealth
+					pos cnt * 8, 0
+					gcopy 2, 0, 48, 8, 16
+				loop
+			}
+
+			if ( shieldCountdown >= 1 ) {
+				if ( shieldCountdown >= 100 ) {
+					reused_1 = 40
+				}
+				else {
+					reused_1 = shieldCountdown * 40 / 100 + 1
+				}
+				repeat reused_1
+					pos cnt * 2 + 1, 0
+					gcopy 2, 4, 64, 1, 16
+				loop
+			}
+			if ( tripleBulletCountdown >= 1 ) {
+				if ( tripleBulletCountdown >= 50 ) {
+					reused_1 = 40
+				}
+				else {
+					reused_1 = tripleBulletCountdown * 40 / 50 + 1
+				}
+				repeat reused_1
+					//draws triple bullet amount bar
+					pos cnt * 2 + 240, 0
+					gcopy 2, 0, 64, 1, 16
+				loop
+			}
+
+			if ( whiteBulletCountdown >= 1 ) {
+				if ( whiteBulletCountdown >= 50 ) {
+					reused_1 = 40
+				}
+				else {
+					reused_1 = whiteBulletCountdown * 40 / 50 + 1
+				}
+				repeat reused_1
+					// draws white bullet amount bar
+					pos cnt * 2 + 240, 0
+					gcopy 2, 2, 64, 1, 16
+				loop
+			}
+			if ( gameOverTimer >= 11 * 12 + 3 ) {
+				pos 128 - 40, 100
+				gcopy 2, 0, 248, 64, 40
+				pos 128 + 40, 100
+				gcopy 2, 64, 248, 64, 40
+				if ( gameOverTimer >= 19 * 12 + 3 ) {
+					color 0, 0, 0
+					boxf 160 - 72, 120 + 24, 160 + 72, 120 + 24 + 24
+					pos 108 - 8 * 2, 120 + 8 * 3 + 4
+					gcopy 2, 280, 216, 136, 16
+				}
+			}
+			if ( gameOverTimer == 0 ) {
+				gmode gmode_add, , , 256
+				if ( nextSectionBackgroundTimer >= 1 ) {
+					pos 0, 0
+					gmode gmode_add, , , nextSectionBackgroundTimer * 256 / 32
+					gcopy 9, nextSectionBackgroundTimer / 2, 0, 320, 240
+				}
+				if ( nextSectionTextFade >= 1 ) {
+					pos 84, 100           //SECTION text
+					gmode gmode_add, , , nextSectionTextFade * 256 / 32
+					if ( sectionFadeTimer >= 1 ) {
+						gmode gmode_add, , , nextSectionTextFade * 32 / 32
+					}
+					gcopy 2, 0, 136, 104, 40 
+					pos 84 + 120                    // SECTION number second digit
+					if ( section >= 10 ) {
+						gcopy 2, section / 10 * 16, 176, 16, 40
+						pos 84 + 120 + 16          // SECTION number first digit
+					}
+					gcopy 2, section \ 10 * 16, 176, 16, 40
+				}
+			}
+			if ( sectionSecondaryTimer >= 1 and sectionFadeTimer == 0 ) {
+				gmode gmode_add, , , 256
+				if ( sectionSecondaryTimer <= 6 ) {
+					reused_1 = (6 - sectionSecondaryTimer) * (6 - sectionSecondaryTimer) * 48 / 36
+				}
+				else {
+					reused_1 = 0
+				}
+				pos 0, 207
+				gcopy 2, 368 + reused_1, 232, 48 - reused_1, 16
+			}
+			if ( sectionFadeTimer >= 1 ) {
+				gmode gmode_add, , , 256 - rnd(70)
+				if ( sectionFadeTimer <= 6 ) {
+					reused_1 = (6 - sectionFadeTimer) * (6 - sectionFadeTimer) * 48 / 36
+				}
+				else {
+					reused_1 = 0
+				}
+				pos 0, 207
+				gcopy 2, 368 + reused_1, 248, 48 - reused_1, 16
+			}
+			if ( UIAnimStep >= 1 and roundState == 2 ) {
+				pos 140, 88
+				gmode gmode_add, , , 256
+				gcopy 2, 160, 216, 40, 16
+				if ( UIAnimStep <= 5 ) {
+					reused_1 = (5 - UIAnimStep) * (5 - UIAnimStep)
+				}
+				else {
+					reused_1 = 0
+				}
+				color 0, 0, 0
+				boxf 160 - 72, 120 + 16, 160 + 72, 120 + 112 + 4 - reused_1      //pause screen background
+				if ( UIAnimStep >= 6 ) {
+					pos 108 + 8 * 3 - 4, 8 * 18                   //continue button
+					gcopy 2, 208, 216, 64, 16
+					pos 108 + 8 * 3 - 4, 8 * 20                   //sfx volume slider border
+					gcopy 2, 112, 232, 64, 16
+					pos 108 + 8 * 3 - 4, 8 * 22                   //music volume slider border
+					gcopy 2, 112, 232, 64, 16
+					pos 108 + 8 * 2 - 4, 8 * 20                   //sfx volume icon
+					gcopy 2, 96, 232, 8, 16
+					pos 108 + 8 * 2 - 4, 8 * 22                   //music volume icon
+					gcopy 2, 104, 232, 8, 16
+					pos 108 + 8 * 3 - 2, 8 * 20                   //sfx volume slider cropped, filled
+					gcopy 2, 176, 232, sfxVolume * 59 / 100, 16
+					pos 108 + 8 * 3 - 2, 8 * 22                   //music volume slider cropped, filled
+					gcopy 2, 176, 232, musicVolume * 59 / 100, 16
+					pos 108 + 8 * 3 - 5, 8 * 24                   //screen size selector
+					gcopy 2, 416, 216 + screenSize * 16, 64, 16
+					pos 108 - 8 * 2, 8 * 27                       //restart/title text
+					gcopy 2, 280, 216, 136, 16
+					pos 108 - 4, 8 * 18 + cursorPos * 16 - 2      //ui cursor left side
+					gcopy 2, 240 + UIAnimStep \ 16 * 8, 232, 8, 16
+					pos 108 + 8 * 12, 8 * 18 + cursorPos * 16 - 2 //ui cursor right size
+					gcopy 2, 240 + (UIAnimStep + 8) \ 16 * 8, 232, 8, 16
+				}
+			}
+			pos 0, 0
+			gzoom 320 * (1 + screenSize), 240 * (1 + screenSize), 0, 0, 0, 320, 240
+			redraw 1
+		}
+		roundTimer += 1
+	}
+	await 0
+	goto *roundLoop
+*label_54
+	for enemy,0,maxEnemies,1
+		enemyPosition(enemy, POS_X) -= 1.0 * playerAccelerationX
+		enemyPosition(enemy, POS_Y) -= 1.0 * playerAccelerationY
+		if ( enemyPosition(enemy, POS_X) > despawnPositivePoint ) {
+			enemyPosition(enemy, POS_X) -= 1.0 * enemyPosScreenLoopCoord
+		}
+		if ( enemyPosition(enemy, POS_X) < despawnNegativePoint ) {
+			enemyPosition(enemy, POS_X) += 1.0 * enemyPosScreenLoopCoord
+		}
+		if ( enemyPosition(enemy, POS_Y) > despawnPositivePoint ) {
+			enemyPosition(enemy, POS_Y) -= 1.0 * enemyPosScreenLoopCoord
+		}
+		if ( enemyPosition(enemy, POS_Y) < despawnNegativePoint ) {
+			enemyPosition(enemy, POS_Y) += 1.0 * enemyPosScreenLoopCoord
+		}
+		enemyDistanceX = enemyPosition(enemy, POS_X) - 160
+		enemyDistanceY = enemyPosition(enemy, POS_Y) - 160
+		if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 3000 and enemyType(enemy) >= 1 and shieldActive == 1 ) {
+			reused_1 = 1
+		}
+		else {
+			reused_1 = 0
+		}
+
+		for projectile,0,maxProjectiles,1
+			damage = 0
+			if ( projectile <= 1 and reused_1 == 1 ) {
+				damage = 1
+			}
+			if ( playerBulletType(projectile) >= 1 ) {
+				enemyDistanceX = enemyPosition(enemy, POS_X) - playerBulletPos(projectile, POS_X)
+				enemyDistanceY = enemyPosition(enemy, POS_Y) - playerBulletPos(projectile, POS_Y)
+				if ( enemyDistanceX * enemyDistanceX + enemyDistanceY * enemyDistanceY <= 500 and enemyType(enemy) >= 1 ) {
+					damage = playerBulletType(projectile)
+				}
+			}
+			if ( enemyType(enemy) >= 5 and enemyType(enemy) <= 8 ) {
+				damage = 0
+			}
+			else {
+				if ( enemySpawningTimer(enemy) <= (-1) and section < 48 ) {
+					damage = 0
+				}
+			}
+			if ( damage >= 1 ) {
+				if ( enemyHealth(enemy) <= 1 or damage == 2 ) {
+					sfxInfo(31 + rnd(3) + (enemyType(enemy) * 5 - 5), 0) = 1
+					if ( enemyType(enemy) == 1 or enemyType(enemy) == 1 + 8 ) {
+						score += 4 + section
+					}
+					if ( enemyType(enemy) == 2 or enemyType(enemy) == 2 + 8 ) {
+						score += 2 + section
+					}
+					if ( enemyType(enemy) == 3 or enemyType(enemy) == 3 + 8 ) {
+						score += 4 + section
+					}
+					if ( enemyType(enemy) == 4 or enemyType(enemy) == 4 + 8 ) {
+						score += 8 + section
+					}
+					enemyType(enemy) = 0
+					enemyAnimTimer(enemy) = 0
+					enemyKillCount += 1
+					if ( section >= 48 ) {
+						if ( enemyKillCount \ 331 == 0 ) {
+							enemyType(enemy) = 5
+						}
+					}
+					else {
+						if ( enemyKillCount \ 101 == 0 ) {
+							enemyType(enemy) = 5
+						}
+					}
+					if ( enemyKillCount \ 131 == 0 ) {
+						enemyType(enemy) = 6
+					}
+					if ( enemyKillCount \ 151 == 0 ) {
+						enemyType(enemy) = 7
+					}
+					if ( enemyKillCount \ 181 == 0 ) {
+						enemyType(enemy) = 8
+					}
+					if ( comboHealth >= 1 ) {
+						scoreMultiplier += 1
+						comboNumberEnemyPosX = enemyPosition(enemy, POS_X)
+						comboNumberEnemyPosY = enemyPosition(enemy, POS_Y)
+					}
+					comboHealth = 20
+					sfxInfo(3, isPlaying) = 1
+					reused_1 = rnd(360)
+					reused_2 = 0
+					if ( section >= 24 ) {
+						reused_2 = rnd(2) * 2
+					}
+					if ( section >= 32 ) {
+						reused_2 = rnd(3)
+					}
+					repeat 5
+						gosub *getAvailableDeathParticleSlot
+						if ( newDeathP != (-1) ) {
+							deathParticlePosInfo(newDeathP, ROT) = 1.0 * cnt * 360 / 5 + reused_1
+							deathParticlePosInfo(newDeathP, POS_X) = enemyPosition(enemy, POS_X) + cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 7
+							deathParticlePosInfo(newDeathP, POS_Y) = enemyPosition(enemy, POS_Y) + sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 7
+							deathParticlePosInfo(newDeathP, VEL_X) = cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 5
+							deathParticlePosInfo(newDeathP, VEL_Y) = sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 5
+							deathParticleType(newDeathP) = 16 + rnd(16)
+							deathParticleSize(newDeathP) = reused_2
+						}
+					loop
+				}
+				else {
+					sfxInfo(34 + rnd(2) + (enemyType(enemy) * 5 - 5), isPlaying) = 1
+					enemySpawningTimer(enemy) = 0
+					enemyAnimTimer(enemy) = -8
+					enemyHealth(enemy) -= 1
+					playerBulletType(projectile) = 0
+					score += 1
+					enemyPosition(enemy, POS_X) += playerBulletPos(projectile, VEL_X) / 2
+					enemyPosition(enemy, POS_Y) += playerBulletPos(projectile, VEL_Y) / 2
+					if ( comboHealth == 0 ) {
+					}
+					else {
+						if ( comboHealth <= 10 ) {
+							comboHealth = 10
+						}
+					}
+					sfxInfo(5, isPlaying) = 1
+					gosub *getAvailableDeathParticleSlot
+					if ( newDeathP != (-1) ) {
+						deathParticlePosInfo(newDeathP, POS_X) = enemyPosition(enemy, POS_X)
+						deathParticlePosInfo(newDeathP, POS_Y) = enemyPosition(enemy, POS_Y)
+						deathParticlePosInfo(newDeathP, VEL_X) = 0.0
+						deathParticlePosInfo(newDeathP, VEL_Y) = 0.0
+						deathParticleType(newDeathP) = 16 + rnd(16)
+						deathParticleSize(newDeathP) = 0
+					}
+				}
+			}
+		next
+		if ( enemySpawningTimer(enemy) <= (-1) and roundTimer \ 2 == 0 ) {
+			enemySpawningTimer(enemy) += 1
+		}
+		if ( enemySpawningTimer(enemy) == 0 ) {
+			if ( enemyType(enemy) == 1 or enemyType(enemy) == 1 + 8 ) {
+				if ( enemyType(enemy) == 1 ) {
+					var_111 = 0
+				}
+				else {
+					var_111 = 1
+				}
+				enemyPosition(enemy, ROT) = rad2deg(atan(enemyPosition(enemy, POS_Y) - 160, enemyPosition(enemy, POS_X) - 160)) + 180 + 180 * var_111
+				currentEnemyAnimTimer = enemyAnimTimer(enemy)
+				if ( currentEnemyAnimTimer >= 60 ) {
+					gosub *getAvailableEnemyProjectileSlot
+					if ( newProjectile != (-1) ) {
+						reused_2 = enemyPosition(enemy, ROT)
+						if ( section >= 48 ) {
+							reused_1 = 2
+						}
+						else {
+							reused_1 = 1
+						}
+						enemyProjectilePosition(newProjectile, POS_X) = enemyPosition(enemy, POS_X) + cos(deg2rad(reused_2)) * 10
+						enemyProjectilePosition(newProjectile, VEL_X) = cos(deg2rad(reused_2)) * 2 * reused_1
+						enemyProjectilePosition(newProjectile, POS_Y) = enemyPosition(enemy, POS_Y) + sin(deg2rad(reused_2)) * 10
+						enemyProjectilePosition(newProjectile, VEL_Y) = sin(deg2rad(reused_2)) * 2 * reused_1
+						enemyProjectileType(newProjectile) = 1
+					}
+					if ( section >= 48 ) {
+						enemyAnimTimer(enemy) = 40
+					}
+					else {
+						enemyAnimTimer(enemy) = 0
+					}
+				}
+				if ( currentEnemyAnimTimer == 0 ) {
+					enemyPosition(enemy, ROT) = (enemyPosition(enemy, ROT) + rnd(2) * 48 - 24) \ 360
+				}
+				enemyAnimTimer(enemy) += 1
+			}
+			if ( enemyType(enemy) == 2 or enemyType(enemy) == 2 + 8 ) {
+				if ( enemyType(enemy) == 2 ) {
+					var_111 = 0
+				}
+				else {
+					var_111 = 1
+				}
+				currentEnemyAnimTimer = enemyAnimTimer(enemy)
+				if ( currentEnemyAnimTimer == 0 ) {
+					enemyPosition(enemy, ROT) = rad2deg(atan(enemyPosition(enemy, POS_Y) - 160, enemyPosition(enemy, POS_X) - 160)) + 180 + 180 * var_111
+					enemyPosition(enemy, ACCEL) = 2.0
+				}
+				if ( currentEnemyAnimTimer >= 20 and currentEnemyAnimTimer <= 32 ) {
+					enemyPosition(enemy, POS_X) += enemyPosition(enemy, ACCEL) * cos(deg2rad(enemyPosition(enemy, ROT)))
+					enemyPosition(enemy, POS_Y) += enemyPosition(enemy, ACCEL) * sin(deg2rad(enemyPosition(enemy, ROT)))
+				}
+				enemyAnimTimer(enemy) += 1
+				if ( currentEnemyAnimTimer >= 34 ) {
+					if ( section >= 48 ) {
+						enemyAnimTimer(enemy) = 16
+					}
+					else {
+						enemyAnimTimer(enemy) = 16 * rnd(2)
+					}
+					enemyPosition(enemy, ROT) = rad2deg(atan(enemyPosition(enemy, POS_Y) - 160, enemyPosition(enemy, POS_X) - 160)) + 180 + 180 * var_111
+					enemyPosition(enemy, ACCEL) = 2.0
+				}
+			}
+			if ( enemyType(enemy) == 3 or enemyType(enemy) == 3 + 8 ) {
+				currentEnemyAnimTimer = enemyAnimTimer(enemy)
+				if ( enemyType(enemy) == 3 ) {
+					var_111 = 0
+				}
+				else {
+					var_111 = 1
+				}
+				if ( currentEnemyAnimTimer >= 40 ) {
+					gosub *getAvailableEnemyProjectileSlot
+					if ( newProjectile != (-1) and currentEnemyAnimTimer \ 2 == 0 ) {
+						reused_2 = enemyPosition(enemy, ROT) - ((section + var_111) \ 2 * 2 - 1) * 150
+						if ( section >= 49 ) {
+							reused_1 = 1
+						}
+						else {
+							reused_1 = 0
+						}
+						enemyProjectilePosition(newProjectile, POS_X) = enemyPosition(enemy, POS_X) + cos(deg2rad(reused_2)) * 10
+						enemyProjectilePosition(newProjectile, VEL_X) = cos(deg2rad(reused_2)) * 3 + reused_1 * 2
+						enemyProjectilePosition(newProjectile, POS_Y) = enemyPosition(enemy, POS_Y) + sin(deg2rad(reused_2)) * 10
+						enemyProjectilePosition(newProjectile, VEL_Y) = sin(deg2rad(reused_2)) * 3 + reused_1 * 2
+						enemyProjectileType(newProjectile) = 2
+					}
+					if ( section >= 48 ) {
+						enemyAnimTimer(enemy) = 20
+					}
+					else {
+						enemyAnimTimer(enemy) = 0
+					}
+				}
+				enemyPosition(enemy, ROT) = (rad2deg(atan(enemyPosition(enemy, POS_Y) - 160, enemyPosition(enemy, POS_X) - 160)) + 360) \ 360
+				enemyDistanceToPlayerX = enemyPosition(enemy, POS_X) - 160
+				enemyDistanceToPlayerY = enemyPosition(enemy, POS_Y) - 160
+				enemyPosition(enemy, ACCEL) = 1.0 * 100 / sqrt(enemyDistanceToPlayerX * enemyDistanceToPlayerX + enemyDistanceToPlayerY * enemyDistanceToPlayerY)
+				if ( enemyPosition(enemy, ACCEL) >= 3 ) {
+					enemyPosition(enemy, ACCEL) = 3.0
+				}
+				enemyPosition(enemy, POS_X) += enemyPosition(enemy, ACCEL) * cos(deg2rad(enemyPosition(enemy, ROT) + (section + var_111) \ 2 * 160 + 100))
+				enemyPosition(enemy, POS_Y) += enemyPosition(enemy, ACCEL) * sin(deg2rad(enemyPosition(enemy, ROT) + (section + var_111) \ 2 * 160 + 100))
+				enemyAnimTimer(enemy) += 1
+			}
+			if ( enemyType(enemy) == 4 or enemyType(enemy) == 4 + 8 ) {
+				if ( enemyType(enemy) == 4 ) {
+					var_111 = 0
+				}
+				else {
+					var_111 = 1
+				}
+				enemyPosition(enemy, ROT) = rad2deg(atan(enemyPosition(enemy, POS_Y) - 160, enemyPosition(enemy, POS_X) - 160)) + 180 + var_111 * 180
+				currentEnemyAnimTimer = enemyAnimTimer(enemy)
+				if ( currentEnemyAnimTimer >= 60 ) {
+					repeat 6
+						gosub *getAvailableEnemyProjectileSlot
+						if ( newProjectile != (-1) ) {
+							reused_2 = 1.0 * cnt * 60 + enemyPosition(enemy, ROT) + 30 + var_111 * 30
+							enemyProjectilePosition(newProjectile, ROT) = reused_2
+							enemyProjectilePosition(newProjectile, POS_X) = enemyPosition(enemy, POS_X) + cos(deg2rad(reused_2)) * 10
+							enemyProjectilePosition(newProjectile, VEL_X) = cos(deg2rad(reused_2)) * 1
+							enemyProjectilePosition(newProjectile, POS_Y) = enemyPosition(enemy, POS_Y) + sin(deg2rad(reused_2)) * 10
+							enemyProjectilePosition(newProjectile, VEL_Y) = sin(deg2rad(reused_2)) * 1
+							enemyProjectileType(newProjectile) = 3
+						}
+					loop
+					if ( section >= 48 ) {
+						enemyAnimTimer(enemy) = 40
+					}
+					else {
+						enemyAnimTimer(enemy) = 0
+					}
+				}
+				if ( currentEnemyAnimTimer == 0 ) {
+					enemyPosition(enemy, ROT) = (enemyPosition(enemy, ROT) + rnd(2) * 48 - 24) \ 360
+				}
+				enemyAnimTimer(enemy) += 1
+			}
+			if ( enemyType(enemy) >= 5 and enemyType(enemy) <= 8 ) {
+				enemyAnimTimer(enemy) += 1
+				if ( enemyAnimTimer(enemy) == 2 ) {
+					sfxInfo(19, isPlaying) = 1
+				}
+				if ( enemyAnimTimer(enemy) >= 100 ) {
+					enemyType(enemy) = 0
+					sfxInfo(14, isPlaying) = 1
+					repeat 5
+						gosub *getAvailableDeathParticleSlot
+						if ( newDeathP != (-1) ) {
+							deathParticlePosInfo(newDeathP, ROT) = 1.0 * cnt * 360 / 5 + reused_1
+							deathParticlePosInfo(newDeathP, POS_X) = enemyPosition(enemy, POS_X) + cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 7
+							deathParticlePosInfo(newDeathP, POS_Y) = enemyPosition(enemy, POS_Y) + sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 7
+							deathParticlePosInfo(newDeathP, VEL_X) = cos(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 5
+							deathParticlePosInfo(newDeathP, VEL_Y) = sin(deg2rad(deathParticlePosInfo(newDeathP, ROT))) * 5
+							deathParticleType(newDeathP) = 16 + rnd(16)
+						}
+					loop
+				}
+			}
+		}
+	next
+	if ( (roundTimer + 10) * 1000 * 60 / 140 / 12 >= currentTime ) {
+		for i,0,maxEnemies,1 //this "i" may not be the same as the other ones
+			for enemy,maxEnemies-1,0,-1
+				if ( enemyPosition(enemy, POS_Y) < enemyPosition(enemy - 1, POS_Y) ) {
+					ddim var_213, 6, 0, 0, 0
+					repeat 6
+						var_213(cnt) = enemyPosition(enemy, cnt)
+						enemyPosition(enemy, cnt) = enemyPosition(enemy - 1, cnt)
+						enemyPosition(enemy - 1, cnt) = var_213(cnt)
+					loop
+					reused_2 = enemyType(enemy)
+					enemyType(enemy) = enemyType(enemy - 1)
+					enemyType(enemy - 1) = reused_2
+					reused_2 = enemyAnimTimer(enemy)
+					enemyAnimTimer(enemy) = enemyAnimTimer(enemy - 1)
+					enemyAnimTimer(enemy - 1) = reused_2
+					reused_2 = enemySpawningTimer(enemy)
+					enemySpawningTimer(enemy) = enemySpawningTimer(enemy - 1)
+					enemySpawningTimer(enemy - 1) = reused_2
+					reused_2 = enemyHealth(enemy)
+					enemyHealth(enemy) = enemyHealth(enemy - 1)
+					enemyHealth(enemy - 1) = reused_2
+				}
+			next
+		next
+	}
+	return
+*label_63
+	for projectile,0,maxProjectiles,1
+		if ( playerBulletPos(projectile, POS_X) < despawnNegativePoint or playerBulletPos(projectile, POS_Y) < despawnNegativePoint or playerBulletPos(projectile, POS_X) > despawnPositivePoint or playerBulletPos(projectile, POS_Y) > despawnPositivePoint ) {
+			playerBulletType(projectile) = 0
+		}
+		playerBulletPos(projectile, POS_X) += playerBulletPos(projectile, VEL_X) - playerAccelerationX / 5
+		playerBulletPos(projectile, POS_Y) += playerBulletPos(projectile, VEL_Y) - playerAccelerationY / 5
+		if ( enemyProjectilePosition(projectile, POS_X) < 0 or enemyProjectilePosition(projectile, POS_Y) < 0 or enemyProjectilePosition(projectile, POS_X) > 320 or enemyProjectilePosition(projectile, POS_Y) > 320 ) {
+			enemyProjectileType(projectile) = 0
+		}
+		if ( enemyProjectileType(projectile) == 1 or enemyProjectileType(projectile) == 2 ) {
+			if ( section >= 50 ) {
+				reused_3 = 5000 + sectionTimer
+			}
+			else {
+				reused_3 = 5000
+			}
+			enemyProjectilePosition(projectile, POS_X) += enemyProjectilePosition(projectile, VEL_X) * reused_3 / 5000 - playerAccelerationX
+			enemyProjectilePosition(projectile, POS_Y) += enemyProjectilePosition(projectile, VEL_Y) * reused_3 / 5000 - playerAccelerationY
+		}
+		else {
+			if ( enemyProjectileType(projectile) == 3 ) {
+				if ( section >= 50 ) {
+					reused_3 = 5000 + sectionTimer
+				}
+				else {
+					reused_3 = 5000
+				}
+				enemyProjectileRot = rad2deg(atan(enemyProjectilePosition(projectile, POS_Y) - 160, enemyProjectilePosition(projectile, POS_X) - 160))
+				enemyProjectileRot = enemyProjectilePosition(projectile, ROT) - enemyProjectileRot
+				if ( enemyProjectileRot >= 180 ) {
+					enemyProjectileRot -= 360
+				}
+				if ( enemyProjectileRot <= (-180) ) {
+					enemyProjectileRot += 360
+				}
+				if ( section >= 48 ) {
+					reused_1 = 3
+				}
+				else {
+					reused_1 = 2
+				}
+				if ( enemyProjectileRot <= (-1) ) {
+					enemyProjectilePosition(projectile, ROT) = enemyProjectilePosition(projectile, ROT) - reused_1
+				}
+				if ( enemyProjectileRot >= 1 ) {
+					enemyProjectilePosition(projectile, ROT) = (enemyProjectilePosition(projectile, ROT) + reused_1) \ 360
+				}
+				if ( enemyProjectilePosition(projectile, ROT) < 0 ) {
+					enemyProjectilePosition(projectile, ROT) += 360.0
+				}
+				enemyProjectilePosition(projectile, POS_X) += cos(deg2rad(enemyProjectilePosition(projectile, ROT))) * reused_3 / 5000 * reused_1 - playerAccelerationX
+				enemyProjectilePosition(projectile, POS_Y) += sin(deg2rad(enemyProjectilePosition(projectile, ROT))) * reused_3 / 5000 * reused_1 - playerAccelerationY
+			}
+		}
+	next
+	if ( (roundTimer + 10) * 1000 * 60 / 140 / 12 >= currentTime ) {
+		for deathParticle,0,maxDeathParticles,1
+			if ( deathParticleSize(deathParticle) == 0 ) {
+				if ( deathParticlePosInfo(deathParticle, POS_X) < 0 or deathParticlePosInfo(deathParticle, POS_Y) < 0 or deathParticlePosInfo(deathParticle, POS_X) > 320 or deathParticlePosInfo(deathParticle, POS_Y) > 320 ) {
+					deathParticleType(deathParticle) = 0
+				}
+				deathParticleRot = rad2deg(atan(deathParticlePosInfo(deathParticle, POS_Y) - 160, deathParticlePosInfo(deathParticle, POS_X) - 160)) + 180
+				deathParticlePosInfo(deathParticle, ROT) = rad2deg(atan(deathParticlePosInfo(deathParticle, VEL_X), deathParticlePosInfo(deathParticle, VEL_Y)))
+				enemyProjectileRot = deathParticlePosInfo(deathParticle, ROT) - deathParticleRot
+				reused_2 = deathParticlePosInfo(deathParticle, POS_X) - 160
+				deathParticlePosYCenter = deathParticlePosInfo(deathParticle, POS_Y) - 160
+				var_217 = (reused_2 * reused_2 + deathParticlePosYCenter * deathParticlePosYCenter) / 500 + 1
+				
+				if ( var_217 >= 90 ) {
+					var_217 = 90
+				}
+				if ( enemyProjectileRot >= 180 ) {
+					enemyProjectileRot -= 360
+				}
+				if ( enemyProjectileRot <= (-180) ) {
+					enemyProjectileRot += 360
+				}
+				if ( enemyProjectileRot >= 1 ) {
+					deathParticlePosInfo(deathParticle, ROT) = (deathParticlePosInfo(deathParticle, ROT) + var_217) \ 360
+				}
+				if ( enemyProjectileRot <= (-1) ) {
+					deathParticlePosInfo(deathParticle, ROT) = deathParticlePosInfo(deathParticle, ROT) - var_217
+				}
+				if ( deathParticlePosInfo(deathParticle, ROT) < 0 ) {
+					deathParticlePosInfo(deathParticle, ROT) += 360.0
+				}
+				if ( var_217 <= 10 ) {
+					reused_1 = 2
+				}
+				else {
+					if ( var_217 <= 30 ) {
+						reused_1 = 1
+					}
+					else {
+						reused_1 = 0
+					}
+				}
+				deathParticlePosInfo(deathParticle, VEL_X) = deathParticlePosInfo(deathParticle, VEL_X) * 0.9 + cos(deg2rad(deathParticlePosInfo(deathParticle, ROT))) * 0.5 + cos(deg2rad(deathParticleRot + 180)) * reused_1
+				deathParticlePosInfo(deathParticle, VEL_Y) = deathParticlePosInfo(deathParticle, VEL_Y) * 0.9 + sin(deg2rad(deathParticlePosInfo(deathParticle, ROT))) * 0.5 + sin(deg2rad(deathParticleRot + 180)) * reused_1
+				deathParticlePosInfo(deathParticle, POS_X) += deathParticlePosInfo(deathParticle, VEL_X)
+				deathParticlePosInfo(deathParticle, POS_Y) += deathParticlePosInfo(deathParticle, VEL_Y)
+			}
+			if ( deathParticleSize(deathParticle) == 1 ) {
+				deathParticlePosInfo(deathParticle, VEL_X) = deathParticlePosInfo(deathParticle, VEL_X) * 0.9
+				deathParticlePosInfo(deathParticle, VEL_Y) = deathParticlePosInfo(deathParticle, VEL_Y) * 0.9
+				deathParticlePosInfo(deathParticle, POS_X) += deathParticlePosInfo(deathParticle, VEL_X) - playerAccelerationX
+				deathParticlePosInfo(deathParticle, POS_Y) += deathParticlePosInfo(deathParticle, VEL_Y) - playerAccelerationY
+			}
+			if ( deathParticleSize(deathParticle) == 2 ) {
+				deathParticlePosInfo(deathParticle, VEL_X) = deathParticlePosInfo(deathParticle, VEL_X) * 0.8
+				deathParticlePosInfo(deathParticle, VEL_Y) = deathParticlePosInfo(deathParticle, VEL_Y) * 0.8
+				deathParticlePosInfo(deathParticle, POS_X) += deathParticlePosInfo(deathParticle, VEL_X) - playerAccelerationX
+				deathParticlePosInfo(deathParticle, POS_Y) += deathParticlePosInfo(deathParticle, VEL_Y) - playerAccelerationY
+				if ( deathParticleType(deathParticle) >= 1 ) {
+					deathParticleType(deathParticle) -= 1
+				}
+			}
+			if ( deathParticleType(deathParticle) >= 1 ) {
+				deathParticleType(deathParticle) -= 1
+			}
+		next
+	}
+	return
+*getAvailablePlayerBulletSlot
+	newProjectile = -1
+	for slot,0,maxProjectiles,1
+		if ( playerBulletType(slot) == 0 ) {
+			newProjectile = slot
+			return
+		}
+	next
+	return
+*getAvailableEnemyProjectileSlot
+	newProjectile = -1
+	for slot,0,maxProjectiles,1
+		if ( enemyProjectileType(slot) == 0 ) {
+			newProjectile = slot
+			return
+		}
+	next
+	return
+*getAvailableDeathParticleSlot
+	newDeathP = -1
+	for slot,0,maxDeathParticles,1
+		if ( deathParticleType(slot) == 0 ) {
+			newDeathP = slot
+			return
+		}
+	next
+	return
+*getAvailableEnemySlot
+	newEnemy = -1
+	for slot,0,maxEnemies,1
+		if ( enemyType(slot) == 0 ) {
+			newEnemy = slot
+			return
+		}
+	next
+	return
+*checkKeys
+	if ( ginfo_act == 0 ) {
+		getkey keyInfo(KEY_LEFT, isPressed), 37
+		getkey keyInfo(KEY_UP, isPressed), 38
+		getkey keyInfo(KEY_RIGHT, isPressed), 39
+		getkey keyInfo(KEY_DOWN, isPressed), 40
+		getkey keyInfo(KEY_Z, isPressed), 90
+		getkey keyInfo(KEY_X, isPressed), 88
+		getkey keyInfo(KEY_S, isPressed), 83
+		getkey keyInfo(KEY_C, isPressed), 67
+		getkey keyInfo(KEY_R, isPressed), 82
+		getkey keyInfo(KEY_T, isPressed), 84
+		getkey keyInfo(KEY_O, isPressed), 79
+		getkey keyInfo(KEY_Q, isPressed), 81
+		getkey keyInfo(KEY_ESC, isPressed), 27
+		for key,0,20,1
+			if ( keyInfo(key, isPressed) == 1 ) {
+				keyInfo(key, pressedTime) += 1
+			}
+			else {
+				keyInfo(key, pressedTime) = 0
+			}
+		next
+		if ( keyInfo(KEY_ESC, isPressed) == 1 ) {
+			goto *exit
+		}
+	}
+	else {
+		dim keyInfo, 20, 2
+	}
+	return
+*playSfx
+	repeat maxSfxFileID
+		if ( sfxInfo(cnt, isPlaying) == 1 ) {
+			ds_play maxSfxFileID * sfxInfo(cnt, 1) + cnt
+			sfxInfo(cnt, isPlaying) = 0
+			sfxInfo(cnt, 1) = (sfxInfo(cnt, 1) + 1) \ unk_1  // rakubloat: this also appears in ghost mayoker and seems to be unused as well
+		}
+	loop
+	return
+*loopRoundMusic
+	if ( shouldRestartRoundMusic == 1 ) {
+		shouldRestartRoundMusic = 0
+		ds_stop soundBufferBaseID + var_204
+		ds_loop soundBufferBaseID + loopingRoundMusicID
+		var_204 = loopingRoundMusicID
+	}
+	return
+*updateVolume
+	repeat maxSfxFileID * unk_1
+		ds_vol cnt, sfxVolume
+	loop
+	repeat 50 + 10
+		ds_vol cnt + soundBufferBaseID, musicVolume
+	loop
+	return
+*changeScreenSize
+	screen 0, (screenSize + 1) * 320, (screenSize + 1) * 240, screen_fixedsize, ginfo_dispx / 2 - 3 - (screenSize + 1) * 160, ginfo_dispy / 2 - 22 - (screenSize + 1) * 120
+	return
+*resetVariables
+	playerWalkAnimFrame = 0
+	damage = 0
+	shieldSfxLoopTimer = 0
+	shieldActive = 0
+	shieldCountdown = 0
+	slot = 0
+	newProjectile = 0
+	backgroundScrollX = 0
+	backgroundScrollY = 0
+	deathParticle = 0
+	unused_3 = 0
+	roundTimer = 0
+	gameOverTimer = 0
+	reused_1 = 0
+	unused_4 = 0
+	reused_2 = 0
+	deathParticlePosYCenter = 0
+	var_111 = 0
+	currentScoreCounterDigit = 0
+	scoreCounterDigitPlace = 0
+	randomTitleScreenImage = 0
+	scoreCounterDigitAnimStep = 0
+	scoreCounterDigitFade = 0
+
+	reused_3 = 0
+	isScoreCounterDigitFullyVisible = 0
+
+	enemyProjectileRot = 0
+	deathParticleRot = 0
+	enemyDistanceX = 0
+	enemyDistanceY = 0
+	index = 0
+	whiteBulletCountdown = 0
+	shouldRestartRoundMusic = 0
+	loopingRoundMusicTimer = 0
+	loopingRoundMusicID = 0
+	var_204 = 0
+	enemySpawnPositionA = 0
+	enemySpawnPositionB = 0
+	tripleBulletCountdown = 0
+	nextSectionTextFade = 0
+	section = 0
+	sectionTimer = 0
+	enemySpawnPattern = 0
+	playerAccelerationX = 0
+	playerAccelerationY = 0
+	nextSectionBackgroundTimer = 0
+	playerDamageBoostCountdown = 0
+	playerAngle = 0
+	var_205 = 0
+	currentEnemyAnimTimer = 0
+	var_182 = 0
+	var_183 = 0
+	playerAbsoluteX = 0
+	playerAbsoluteY = 0
+	enemiesOnField = 0
+	var_184 = 0
+	var_201 = 0
+	var_206 = 0
+	nullptr = 0 // getstr is only used here to get string length, so this dummy variable is used as the necessary first argument
+	enemy = 0
+	enemyDistanceToPlayerX = 0
+	enemyDistanceToPlayerY = 0
+	currentTime = 0
+	initialTime = 0
+	var_168 = 0
+	scoreMultiplier = 0
+	comboHealth = 0
+	scoreMultiplierWhenComboEnded = 0
+	postComboEndedTimer = 0
+	scoreNumberInterpolation = 0
+	sectionFadeTimer = 0
+	return
+*exit
+	saveData = 0
+	saveData = ""
+	repeat 10
+		saveData += str(scores(cnt)) + "\n"
+	loop
+	bsave "data\\savedata\\0", saveData
+	end
